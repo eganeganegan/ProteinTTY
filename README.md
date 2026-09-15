@@ -147,27 +147,65 @@ When standard input or output is not a TTY, ProteinTTY renders one frame and exi
 ## Command Console
 
 Press `:` while viewing a structure, type a command, and press `Enter`. Use `Escape` to cancel, Backspace to edit,
-and Up/Down to recall command history. Multiple commands can be separated with `;`; quoted arguments preserve spaces.
+Up/Down to recall command history, and Tab to complete commands, settings, values, and selection names. Multiple
+commands can be separated with `;`; quoted arguments preserve spaces.
 
 ```text
 show atoms|backbone|cartoon|sticks|residues
+show <selection>
+hide <selection>
+select <name> <selection>
+delete <name>|all
 color element|chain|residue|bfactor|secondary
+color <selection> default|black|red|green|yellow|blue|magenta|cyan|white
 set projection perspective|orthographic
 set renderer cells|braille
 set charset ascii|unicode
-set info on|off|toggle
-set sequence on|off|toggle
+set info|sequence on|off|toggle
+set background default|black|red|green|yellow|blue|magenta|cyan|white
 spin on|off|toggle
 zoom 1.5
+zoom <selection>
+center <selection>
+inspect <single-atom-selection>
 rotate yaw|pitch|roll 15
 reset
 count atoms|residues|chains
-list chains
+count <selection>
+list chains|selections
 sequence [chain]
+distance <atom-serial|single-atom-selection> <atom-serial|single-atom-selection>
+angle <atom1> <atom2> <atom3>
+dihedral <atom1> <atom2> <atom3> <atom4>
+load <structure.pdb|structure.cif>
+fetch <PDB-ID> [format pdb|cif]
+save <snapshot.txt>
 info
 help [command]
 quit
 ```
+
+Selections can use `all`, `none`, `chain`, `resi`, `resn`, `name`, `element`, `serial`, `hetero`, and `solvent`.
+Combine predicates with `and`, `or`, `not`, and parentheses. Residue ranges and alternatives use forms such as
+`resi 10-24` and `resn ASP+GLU`; quote chain identifiers containing spaces.
+
+Selections operate on atoms. A residue therefore selects all of its atoms, and residue numbers may repeat between
+chains. Use `chain A and resi 10` to identify one residue unambiguously. `show <selection>` displays only matching
+atoms; `show all` restores the complete structure.
+
+```text
+select active chain A and resi 10-24
+select acidic resn ASP+GLU
+hide solvent
+color active cyan
+center active
+zoom active
+inspect chain A and resi 14 and name CA
+distance 1 2
+```
+
+Measurement operands are atom serials or named selections containing exactly one atom. Loading or fetching a new
+structure clears selections and atom-specific colors, resets the camera, and safely rebuilds inferred bonds.
 
 The same dispatcher powers automation. Query output is written separately from snapshot output, and script lines
 beginning with `#` are comments:
@@ -188,6 +226,7 @@ ascii-protein examples/1crn.pdb --script examples/presentation.ptty
 - `terminal.cpp`: POSIX raw mode, alternate-screen lifecycle, resizing, input polling, and arrow-key decoding
 - `cli.cpp` and `main.cpp`: option parsing and the application loop
 - `command.cpp`: shared command tokenization, dispatch, queries, scripts, and interactive-console behavior
+- `selection.cpp`: boolean molecular selection parsing and atom-mask evaluation
 
 `coordinate_frame_source.hpp` defines the format-independent frame producer contract for future trajectory playback,
 without coupling trajectory formats to rendering or terminal handling.
@@ -197,7 +236,8 @@ without coupling trajectory formats to rendering or terminal handling.
 The dependency-free test executable covers vector operations, rotation, fixed-column parsing, malformed records,
 alternate conformer selection, mmCIF loop/quote handling, coordinate centering, residue/chain grouping, secondary
 structure, amino-acid conversion, spatial bond inference equivalence, RCSB cache behavior, projection, atom inspection,
-full mmCIF chain identifiers, command parsing/dispatch, and both renderers.
+full mmCIF chain identifiers, selection expressions, command parsing/dispatch, measurements, completion, structure
+replacement, and both renderers.
 
 ```sh
 ctest --test-dir build --output-on-failure
@@ -237,36 +277,6 @@ rendering the 772 KB `4HHB.cif` hemoglobin structure in ball-and-stick mode take
 timings vary by compiler, hardware, and terminal dimensions.
 
 ## Next Steps
-
-### Selection Commands
-
-Extend the command console with molecular selections inspired by PyMOL, ChimeraX, Jmol, and VMD:
-
-```text
-hide solvent
-color chain A cyan
-select active chain A and resi 10-24
-select acidic resn ASP+GLU
-center active
-zoom active
-inspect chain A and resi 14 and name CA
-set background black
-load structure.cif
-fetch 4HHB format cif
-save snapshot.txt
-help select
-```
-
-The next command phase should provide:
-
-1. A tokenizer and parser with quoted strings, command chaining, useful source positions, and recoverable errors.
-2. A selection expression parser covering `all`, chain, residue number/range, residue name, atom name, element, hetero,
-  solvent, and boolean `and`/`or`/`not` expressions.
-3. Named selections that can drive visibility, coloring, centering, inspection, and future measurements.
-4. Tab completion for commands, settings, selection keywords, and names.
-5. Structure mutation commands such as `load`, `fetch`, and `save`, with safe renderer reconstruction.
-6. Measurement commands such as `distance`, `angle`, and `dihedral` whose output can be captured without launching
-  the interactive viewer.
 
 Follow-on roadmap items are geometry-based secondary-structure fallback, XYZ trajectory playback behind the
 coordinate-frame source interface, native Windows terminal support, and BinaryCIF loading.

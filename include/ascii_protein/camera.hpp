@@ -14,6 +14,7 @@ struct Camera {
     double roll{0.0};
     double zoom{1.0};
     Vec2 pan{};
+    Vec3 target{};
     Projection projection{Projection::perspective};
 
     Mat3 rotation() const {

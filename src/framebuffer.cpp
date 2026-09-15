@@ -62,15 +62,19 @@ const Cell& Framebuffer::at(int x, int y) const {
     return cells_[static_cast<std::size_t>(y * width_ + x)];
 }
 
-std::string Framebuffer::toString(bool ansiColor) const {
+std::string Framebuffer::toString(bool ansiColor, int backgroundColor) const {
     std::string output;
     output.reserve(cells_.size() * 2);
     int activeColor = -1;
     for (int y = 0; y < height_; ++y) {
+        if (ansiColor && backgroundColor != 0) output += "\x1b[" + std::to_string(backgroundColor) + "m";
         for (int x = 0; x < width_; ++x) {
             const auto& cell = at(x, y);
             if (ansiColor && cell.color != activeColor) {
-                output += cell.color == 0 ? "\x1b[0m" : "\x1b[" + std::to_string(cell.color) + "m";
+                output += cell.color == 0
+                              ? "\x1b[0m" + (backgroundColor == 0 ? std::string{} :
+                                               "\x1b[" + std::to_string(backgroundColor) + "m")
+                              : "\x1b[" + std::to_string(cell.color) + "m";
                 activeColor = cell.color;
             }
             output += utf8(cell.glyph);

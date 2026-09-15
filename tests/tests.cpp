@@ -5,6 +5,7 @@
 #include "ascii_protein/pdb_parser.hpp"
 #include "ascii_protein/rcsb.hpp"
 #include "ascii_protein/renderer.hpp"
+#include "ascii_protein/selection.hpp"
 #include "ascii_protein/structure.hpp"
 #include "ascii_protein/structure_loader.hpp"
 
@@ -248,7 +249,7 @@ void testCommands() {
     ascii_protein::RenderSettings render;
     bool autorotate = false;
     bool running = true;
-    ascii_protein::CommandState state{camera, render, structure, autorotate, running};
+    ascii_protein::CommandState state{camera, render, structure, autorotate, running, {}, {}};
 
     const auto result = ascii_protein::executeCommands(
         "show cartoon; color secondary; set renderer braille; set projection ortho; spin on; rotate yaw 10; "
@@ -268,6 +269,137 @@ void testCommands() {
     const auto invalid = ascii_protein::executeCommands("show 'unterminated", state);
     require(!invalid.success && invalid.output.front().find("column 6") != std::string::npos,
             "positioned command error");
+
+    const auto temporary = std::filesystem::temp_directory_path() / "protein-tty-command-load.pdb";
+    {
+        std::ofstream output(temporary);
+        output << "ATOM      7  CA  ALA A   2       1.000   2.000   3.000  1.00 10.00           C  \n";
+    }
+    int reloads = 0;
+    std::filesystem::path saved;
+    state.structureChanged = [&] { ++reloads; };
+    state.saveFrame = [&](const std::filesystem::path& path) { saved = path; };
+    const auto io = ascii_protein::executeCommands(
+        "load " + temporary.string() + "; set background black; save command-snapshot.txt", state);
+    require(io.success && reloads == 1 && structure.atoms.size() == 1, "load command and renderer notification");
+    require(saved == "command-snapshot.txt" && render.backgroundColor == 40, "save and background commands");
+        const auto completions = ascii_protein::commandCompletions("set rend", state);
+        require(completions.size() == 1 && completions.front() == "renderer", "setting completion");
+        render.namedSelections["focus"] = ascii_protein::AtomMask(structure.atoms.size(), true);
+        const auto selectionCompletions = ascii_protein::commandCompletions("hide fo", state);
+        require(selectionCompletions.size() == 1 && selectionCompletions.front() == "focus", "named selection completion");
+    std::filesystem::remove(temporary);
+
+        ascii_protein::Framebuffer backgroundFrame(2, 1);
+        backgroundFrame.text(0, 0, "x", 91);
+        const auto ansi = backgroundFrame.toString(true, 40);
+        require(ansi.find("\x1b[40m") != std::string::npos && backgroundFrame.toPlainText() == "x ",
+            "ANSI background and plain output");
+}
+
+void testSelections() {
+    ascii_protein::Structure structure;
+    const auto addAtom = [&](int serial, std::string name, std::string element, std::string residueName,
+                             int residueNumber, std::string chain, bool hetero) {
+        ascii_protein::Atom atom;
+        atom.serial = serial;
+        atom.name = std::move(name);
+        atom.element = std::move(element);
+        atom.residueName = std::move(residueName);
+        atom.residueNumber = residueNumber;
+        atom.chain = std::move(chain);
+        atom.hetero = hetero;
+        atom.occupancy = 1.0;
+        if (serial == 2) atom.position = {1.0, 0.0, 0.0};
+        if (serial == 3) atom.position = {1.0, 1.0, 0.0};
+        if (serial == 4) atom.position = {1.0, 1.0, 1.0};
+        structure.atoms.push_back(std::move(atom));
+    };
+    addAtom(1, "CA", "C", "ALA", 10, "A", false);
+    addAtom(2, "OD1", "O", "ASP", 11, "A", false);
+    addAtom(3, "CA", "C", "GLU", 12, "LONG CHAIN", false);
+    addAtom(4, "O", "O", "HOH", 20, "B", true);
+    structure.finalize();
+
+    const auto acidic = ascii_protein::evaluateSelection("resn ASP+GLU", structure);
+    require(ascii_protein::selectionSize(acidic) == 2, "multi-name residue selection");
+    require(ascii_protein::selectionSize(ascii_protein::evaluateSelection("resi 10-11 and not name CA", structure)) == 1,
+            "range and negation selection");
+    require(ascii_protein::selectionSize(
+                ascii_protein::evaluateSelection("(chain A or chain 'LONG CHAIN') and element C", structure)) == 2,
+            "parenthesized quoted-chain selection");
+    require(ascii_protein::selectionSize(ascii_protein::evaluateSelection("hetero and solvent", structure)) == 1,
+            "solvent selection");
+    ascii_protein::NamedSelections named{{"acidic", acidic}};
+    require(ascii_protein::selectionSize(ascii_protein::evaluateSelection("acidic or serial 4", structure, named)) == 3,
+            "named selection reference");
+
+    ascii_protein::Camera camera;
+    ascii_protein::RenderSettings render;
+    bool autorotate = false;
+    bool running = true;
+    ascii_protein::CommandState state{camera, render, structure, autorotate, running, {}, {}};
+    const auto commands = ascii_protein::executeCommands(
+        "select acidic resn ASP+GLU; hide solvent; color acidic red; center acidic; zoom acidic; "
+        "inspect serial 1; distance 1 2; angle 1 2 3; dihedral 1 2 3 4; count acidic",
+        state);
+    require(commands.success, "selection command chain");
+    require(ascii_protein::selectionSize(render.selectedAtoms) == 2 && !render.visibleAtoms[3],
+            "selection and visibility commands");
+    require(render.atomColors[1] == 91 && render.atomColors[2] == 91, "selection color command");
+    require(render.inspectedAtom == 0 && camera.zoom > 1.0, "selection navigation commands");
+    require(commands.output.size() == 5 && commands.output[1] == "1.000 A" && commands.output[2] == "90.000 deg" &&
+                commands.output[4] == "2",
+            "measurement and selection count output");
+    try {
+        static_cast<void>(ascii_protein::evaluateSelection("chain A and", structure));
+        require(false, "incomplete selection rejected");
+    } catch (const std::runtime_error& error) {
+        require(std::string(error.what()).find("column") != std::string::npos, "positioned selection error");
+    }
+    try {
+        static_cast<void>(ascii_protein::evaluateSelection("resi 10oops", structure));
+        require(false, "partial residue number rejected");
+    } catch (const std::runtime_error& error) {
+        require(std::string(error.what()).find("invalid residue range") != std::string::npos,
+                "strict residue number error");
+    }
+
+    const auto undefinedAngle = ascii_protein::executeCommands("angle 1 1 2", state);
+    require(!undefinedAngle.success && undefinedAngle.output.front().find("undefined") != std::string::npos,
+            "degenerate angle rejected");
+
+    ascii_protein::Structure repeatedNumbers;
+    const auto addResidueAtom = [&](int serial, std::string name, std::string chain, int residueNumber) {
+        ascii_protein::Atom atom;
+        atom.serial = serial;
+        atom.name = std::move(name);
+        atom.element = "C";
+        atom.residueName = "ALA";
+        atom.residueNumber = residueNumber;
+        atom.chain = std::move(chain);
+        atom.occupancy = 1.0;
+        repeatedNumbers.atoms.push_back(std::move(atom));
+    };
+    addResidueAtom(1, "N", "A", 10);
+    addResidueAtom(2, "CA", "A", 10);
+    addResidueAtom(3, "CA", "B", 10);
+    addResidueAtom(4, "CA", "A", 11);
+    repeatedNumbers.finalize();
+    ascii_protein::Camera repeatedCamera;
+    ascii_protein::RenderSettings repeatedRender;
+    ascii_protein::CommandState repeatedState{
+        repeatedCamera, repeatedRender, repeatedNumbers, autorotate, running, {}, {}};
+    const auto ambiguous = ascii_protein::executeCommands("select ten resi 10", repeatedState);
+    require(ambiguous.success && ambiguous.output.front() == "3 atoms selected (2 residues)",
+            "residue number spans chains and reports both residues");
+    const auto oneResidue = ascii_protein::executeCommands(
+        "select one chain A and resi 10; show one", repeatedState);
+    require(oneResidue.success && oneResidue.output.front() == "2 atoms selected (1 residue)",
+            "chain-qualified residue feedback");
+    require(ascii_protein::selectionSize(repeatedRender.visibleAtoms) == 2,
+            "show selection hides nonmatching atoms");
+    require(!repeatedRender.selectedResidue, "no phantom default residue highlight");
 }
 
 void testCommandCliOptions() {
@@ -304,6 +436,7 @@ int main() {
         testRcsbCache();
         testSpatialBondInference();
         testCommands();
+        testSelections();
         testCommandCliOptions();
         std::cout << "All tests passed\n";
         return 0;

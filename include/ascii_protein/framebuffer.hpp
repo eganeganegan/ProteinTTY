@@ -25,7 +25,7 @@ public:
     int width() const { return width_; }
     int height() const { return height_; }
     const Cell& at(int x, int y) const;
-    std::string toString(bool ansiColor) const;
+    std::string toString(bool ansiColor, int backgroundColor = 0) const;
     std::string toPlainText() const;
 
 private:

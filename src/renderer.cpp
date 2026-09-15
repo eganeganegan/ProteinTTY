@@ -122,7 +122,7 @@ Renderer::Renderer(const Structure& structure) : structure_(structure), bonds_(i
 
 Renderer::RenderPoint Renderer::transform(const Vec3& position, const Camera& camera, int width, int height,
                                           RendererBackend backend) const {
-    const Vec3 rotated = camera.rotation() * position;
+    const Vec3 rotated = camera.rotation() * (position - camera.target);
     const double availableWidth = std::max(1, width - 2);
     const double availableHeight = std::max(1, height - 2);
     const double fitScale = std::min(availableWidth / (structure_.boundingRadius * 2.0),
@@ -145,12 +145,17 @@ ProjectedPoint Renderer::project(const Vec3& position, const Camera& camera, int
     return transform(position, camera, width, height, RendererBackend::cells).projected;
 }
 
-int Renderer::atomColor(const Atom& atom, const RenderSettings& settings) const {
+int Renderer::atomColor(std::size_t atomIndex, const RenderSettings& settings) const {
+    const auto& atom = structure_.atoms[atomIndex];
     if (settings.inspectedAtom && *settings.inspectedAtom < structure_.atoms.size() &&
-        &atom == &structure_.atoms[*settings.inspectedAtom]) {
+        atomIndex == *settings.inspectedAtom) {
         return 96;
     }
-    if (atom.residueIndex == settings.selectedResidue) {
+    if (atomIndex < settings.atomColors.size() && settings.atomColors[atomIndex] != 0) {
+        return settings.atomColors[atomIndex];
+    }
+    if (atomIndex < settings.selectedAtoms.size() && settings.selectedAtoms[atomIndex]) return 96;
+    if (settings.selectedResidue && atom.residueIndex == *settings.selectedResidue) {
         return 97;
     }
     if (settings.colorMode == ColorMode::chain) {
@@ -199,6 +204,7 @@ std::optional<std::size_t> Renderer::nearestAtom(const Camera& camera, const Ren
     double nearestDistance = std::numeric_limits<double>::infinity();
     std::optional<std::size_t> nearest;
     for (std::size_t index = 0; index < structure_.atoms.size(); ++index) {
+        if (index < settings.visibleAtoms.size() && !settings.visibleAtoms[index]) continue;
         if (!atomShown(structure_.atoms[index], settings.mode)) continue;
         const auto projected = transform(structure_.atoms[index].position, camera, rasterWidth, rasterHeight,
                                          settings.backend).projected;
@@ -214,6 +220,7 @@ std::optional<std::size_t> Renderer::nearestAtom(const Camera& camera, const Ren
 
 void Renderer::drawAtom(std::size_t atomIndex, const Camera& camera, const RenderSettings& settings, int viewWidth,
                         int height) {
+    if (atomIndex < settings.visibleAtoms.size() && !settings.visibleAtoms[atomIndex]) return;
     const auto& atom = structure_.atoms[atomIndex];
     const auto point = transform(atom.position, camera, viewWidth, height, settings.backend);
     if (!point.projected.visible) return;
@@ -222,7 +229,7 @@ void Renderer::drawAtom(std::size_t atomIndex, const Camera& camera, const Rende
     const double resolutionScale = settings.backend == RendererBackend::braille ? 2.0 : 1.0;
     const int radius = std::clamp(
         static_cast<int>(std::round(displayRadius(atom.element) * camera.zoom * resolutionScale)), 0, 6);
-    const int color = atomColor(atom, settings);
+    const int color = atomColor(atomIndex, settings);
     for (int offsetY = -radius; offsetY <= radius; ++offsetY) {
         for (int offsetX = -radius * 2; offsetX <= radius * 2; ++offsetX) {
             const double distance = std::sqrt(std::pow(offsetX / 2.0, 2.0) + std::pow(offsetY, 2.0));
@@ -238,13 +245,15 @@ void Renderer::drawAtom(std::size_t atomIndex, const Camera& camera, const Rende
 
 void Renderer::drawLine(std::size_t first, std::size_t second, const Camera& camera, const RenderSettings& settings,
                         int viewWidth, int height) {
+    if ((first < settings.visibleAtoms.size() && !settings.visibleAtoms[first]) ||
+        (second < settings.visibleAtoms.size() && !settings.visibleAtoms[second])) return;
     const auto start = transform(structure_.atoms[first].position, camera, viewWidth, height, settings.backend).projected;
     const auto end = transform(structure_.atoms[second].position, camera, viewWidth, height, settings.backend).projected;
     if (!start.visible || !end.visible) return;
     const double deltaX = end.x - start.x;
     const double deltaY = end.y - start.y;
     const int steps = std::max(1, static_cast<int>(std::ceil(std::max(std::abs(deltaX), std::abs(deltaY)))));
-    const int color = atomColor(structure_.atoms[first], settings);
+    const int color = atomColor(first, settings);
     for (int step = 0; step <= steps; ++step) {
         const double amount = static_cast<double>(step) / steps;
         const int x = static_cast<int>(std::round(start.x + deltaX * amount));
@@ -333,8 +342,8 @@ void Renderer::drawPanels(const Camera& camera, const RenderSettings& settings, 
             std::ostringstream factors;
             factors << std::fixed << std::setprecision(1) << "B " << atom.bFactor << "  Occ " << atom.occupancy;
             framebuffer_.text(x, y++, factors.str(), 37);
-        } else if (!structure_.residues.empty()) {
-            const auto& residue = structure_.residues[std::min(settings.selectedResidue, structure_.residues.size() - 1)];
+        } else if (settings.selectedResidue && *settings.selectedResidue < structure_.residues.size()) {
+            const auto& residue = structure_.residues[*settings.selectedResidue];
             framebuffer_.text(x, y++, "SELECTED", 93);
             framebuffer_.text(x, y++, "Chain " + displayChain(residue.chain) + "  " +
                                              residue.name + std::to_string(residue.number), 97);
@@ -350,9 +359,9 @@ void Renderer::drawPanels(const Camera& camera, const RenderSettings& settings, 
         framebuffer_.text(x, framebuffer_.height() - 2, "[h] help  [q] quit", 90);
     }
 
-    if (settings.showSequence && !structure_.residues.empty()) {
+    if (settings.showSequence && settings.selectedResidue && *settings.selectedResidue < structure_.residues.size()) {
         const int y = framebuffer_.height() - 4;
-        const std::size_t selected = std::min(settings.selectedResidue, structure_.residues.size() - 1);
+        const std::size_t selected = *settings.selectedResidue;
         const std::size_t start = selected > 25 ? selected - 25 : 0;
         const std::size_t end = std::min(structure_.residues.size(), start + static_cast<std::size_t>(std::max(1, viewWidth - 4)));
         std::string sequence;

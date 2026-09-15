@@ -6,6 +6,8 @@
 
 #include <string>
 #include <string_view>
+#include <filesystem>
+#include <functional>
 #include <vector>
 
 namespace ascii_protein {
@@ -13,9 +15,11 @@ namespace ascii_protein {
 struct CommandState {
     Camera& camera;
     RenderSettings& render;
-    const Structure& structure;
+    Structure& structure;
     bool& autorotate;
     bool& running;
+    std::function<void()> structureChanged;
+    std::function<void(const std::filesystem::path&)> saveFrame;
 };
 
 struct CommandResult {
@@ -25,5 +29,6 @@ struct CommandResult {
 
 CommandResult executeCommands(std::string_view source, CommandState state);
 std::string commandHelp(std::string_view command = {});
+std::vector<std::string> commandCompletions(std::string_view input, CommandState state);
 
 } // namespace ascii_protein

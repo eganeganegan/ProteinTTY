@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ascii_protein VERSION 0.5.0 LANGUAGES CXX)
+project(ascii_protein VERSION 0.6.0 LANGUAGES CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -16,6 +16,7 @@ add_library(ascii_protein_core
     src/terminal.cpp
     src/rcsb.cpp
     src/command.cpp
+    src/selection.cpp
 )
 target_include_directories(ascii_protein_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

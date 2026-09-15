@@ -2,6 +2,7 @@
 
 #include "ascii_protein/camera.hpp"
 #include "ascii_protein/framebuffer.hpp"
+#include "ascii_protein/selection.hpp"
 #include "ascii_protein/structure.hpp"
 
 #include <cstddef>
@@ -25,8 +26,13 @@ struct RenderSettings {
     bool showInfo{true};
     bool showSequence{false};
     bool showHelp{false};
-    std::size_t selectedResidue{};
+    int backgroundColor{};
+    std::optional<std::size_t> selectedResidue;
     std::optional<std::size_t> inspectedAtom;
+    AtomMask visibleAtoms;
+    AtomMask selectedAtoms;
+    std::vector<int> atomColors;
+    NamedSelections namedSelections;
     bool commandActive{};
     std::string commandLine;
     std::string commandMessage;
@@ -72,7 +78,7 @@ private:
                   int height);
     void drawLine(std::size_t first, std::size_t second, const Camera& camera, const RenderSettings& settings,
                   int viewWidth, int height);
-    int atomColor(const Atom& atom, const RenderSettings& settings) const;
+    int atomColor(std::size_t atomIndex, const RenderSettings& settings) const;
     void putPixel(int x, int y, double depth, char32_t glyph, int color);
     void prepareBraille(int width, int height);
     void composeBraille(int viewWidth, int height);

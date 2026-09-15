@@ -12,6 +12,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -87,6 +88,26 @@ bool handleConsoleKey(const ascii_protein::KeyEvent& event, ConsoleState& consol
     }
     if (event.character == 127 || event.character == '\b') {
         if (!console.input.empty()) console.input.pop_back();
+        return true;
+    }
+    if (event.character == '\t') {
+        const auto completions = ascii_protein::commandCompletions(console.input, commandState);
+        if (completions.empty()) return true;
+        std::string common = completions.front();
+        for (const auto& completion : completions) {
+            while (!common.empty() && !completion.starts_with(common)) common.pop_back();
+        }
+        const auto tokenStart = console.input.find_last_of(" \t;");
+        const std::size_t start = tokenStart == std::string::npos ? 0 : tokenStart + 1;
+        if (common.size() > console.input.size() - start) console.input.replace(start, std::string::npos, common);
+        if (completions.size() == 1) console.input += ' ';
+        else {
+            console.message.clear();
+            for (const auto& completion : completions) {
+                if (!console.message.empty()) console.message += ' ';
+                console.message += completion;
+            }
+        }
         return true;
     }
     if (std::isprint(static_cast<unsigned char>(event.character))) console.input.push_back(event.character);
@@ -167,11 +188,16 @@ void applyKey(const ascii_protein::KeyEvent& event, ascii_protein::Camera& camer
         else settings.inspectedAtom = centerAtom;
         break;
     case '[':
-        if (residueCount > 0) settings.selectedResidue = settings.selectedResidue == 0 ? residueCount - 1
-                                                                                       : settings.selectedResidue - 1;
+        if (residueCount > 0) {
+            settings.selectedResidue = !settings.selectedResidue || *settings.selectedResidue == 0
+                                           ? residueCount - 1
+                                           : *settings.selectedResidue - 1;
+        }
         break;
     case ']':
-        if (residueCount > 0) settings.selectedResidue = (settings.selectedResidue + 1) % residueCount;
+        if (residueCount > 0) {
+            settings.selectedResidue = settings.selectedResidue ? (*settings.selectedResidue + 1) % residueCount : 0;
+        }
         break;
     case ' ': autorotate = !autorotate; break;
     case 'x': case 'X': saveSnapshot(framebuffer, snapshotNumber); break;
@@ -196,14 +222,23 @@ int main(int argc, char** argv) {
         const auto input = options.pdbId ? (options.fetchCif ? ascii_protein::fetchMmcif(*options.pdbId)
                                     : ascii_protein::fetchPdb(*options.pdbId))
                          : *options.input;
-        const auto structure = ascii_protein::loadStructure(input);
+        auto structure = ascii_protein::loadStructure(input);
         for (const auto& warning : structure.warnings) std::cerr << "warning: " << warning << '\n';
-        ascii_protein::Renderer renderer(structure);
+        auto renderer = std::make_unique<ascii_protein::Renderer>(structure);
         ascii_protein::Camera camera;
         camera.projection = options.projection;
         bool running = true;
         bool autorotate = options.spin;
-        ascii_protein::CommandState commandState{camera, options.render, structure, autorotate, running};
+        int currentWidth = options.width;
+        int currentHeight = options.height;
+        ascii_protein::CommandState commandState{
+            camera, options.render, structure, autorotate, running,
+            [&] { renderer = std::make_unique<ascii_protein::Renderer>(structure); },
+            [&](const std::filesystem::path& path) {
+                std::ofstream output(path);
+                if (!output) throw std::runtime_error("cannot save snapshot: " + path.string());
+                output << renderer->render(camera, options.render, currentWidth, currentHeight).toPlainText() << '\n';
+            }};
         const auto initialCommands = runInitialCommands(options, commandState);
         if (!running) {
             for (const auto& line : initialCommands.output) std::cout << line << '\n';
@@ -212,8 +247,8 @@ int main(int argc, char** argv) {
 
         if (options.snapshot || !ascii_protein::Terminal::interactive()) {
             for (const auto& line : initialCommands.output) std::cerr << line << '\n';
-            const auto& frame = renderer.render(camera, options.render, options.width, options.height);
-            std::cout << frame.toString(options.render.color && !options.snapshot) << '\n';
+            const auto& frame = renderer->render(camera, options.render, options.width, options.height);
+            std::cout << frame.toString(options.render.color && !options.snapshot, options.render.backgroundColor) << '\n';
             return 0;
         }
 
@@ -230,14 +265,16 @@ int main(int argc, char** argv) {
             previous = now;
             if (autorotate) camera.rotate(elapsed * 24.0, 0.0);
             const auto dimensions = terminal.size();
+            currentWidth = dimensions.width;
+            currentHeight = dimensions.height;
             options.render.commandActive = console.active;
             options.render.commandLine = console.input;
             options.render.commandMessage = console.message;
-            const auto& frame = renderer.render(camera, options.render, dimensions.width, dimensions.height);
+            const auto& frame = renderer->render(camera, options.render, dimensions.width, dimensions.height);
             if (dimensions.width < 20 || dimensions.height < 8) {
                 terminal.present("Terminal too small (minimum 20x8). Resize or press q.");
             } else {
-                terminal.present(frame.toString(options.render.color));
+                terminal.present(frame.toString(options.render.color, options.render.backgroundColor));
             }
             const auto event = terminal.readKey(autorotate ? 33 : 100);
             if (options.spin && event.key != ascii_protein::Key::none) break;
@@ -252,7 +289,7 @@ int main(int argc, char** argv) {
                 console.historyIndex = console.history.size();
                 continue;
             }
-            const auto centerAtom = renderer.nearestAtom(camera, options.render, dimensions.width, dimensions.height);
+            const auto centerAtom = renderer->nearestAtom(camera, options.render, dimensions.width, dimensions.height);
             applyKey(event, camera, options.render, structure.residues.size(), running, autorotate, frame,
                      snapshotNumber, centerAtom);
         }
