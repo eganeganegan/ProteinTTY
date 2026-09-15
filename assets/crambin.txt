@@ -1,0 +1,32 @@
+                                                                                                              
+                                                                                    PROTEIN TTY               
+                                                                                    ------------------        
+                                                                                    File: 1crn.pdb            
+                                                                                    Atoms: 327                
+                                                                                    Residues: 46              
+                                                                                    Chains: 1                 
+                                                                                                              
+                                                                                    Mode: C-alpha trace       
+                                        MHM            HGH                          Color: residue            
+                               HGH MHM.MSSSMM    HGH..HS#.H                         View: orthographic        
+                              MSSSMGS.M 3h3MHHG.HS#SH  3MHGH                        Yaw -25  Pitch 15         
+                               3h3..MGMMHGH...#SH3M3    H###H                       Zoom: 1.0x                
+                            MH.    MSSSHS#SHh3h3     HGH hMh                                                  
+                           MSS.HGHMG3HG.3h3.Mh HGH .HS#GSGHGH                       SELECTED                  
+                            3hHS#SH.HS#SHhhGHGGSGHSH 3H###H##H                      Chain A  THR1             
+                             MS3h3 MH3GSGSHHSG.9#G.#H..hMhhMh                       Atoms: 7                  
+                              3h3 MHGG#9#.#HGSGMhhMh                                B-factor: 12.3            
+                                HGH###hMhM.G#9#G                                    Type: sheet               
+                               HS#ShMhH3M3MGhMh                                                               
+                               M3hH.H.S#SMH###H                                                               
+                               HGHS#SH3h3HShMh                                                                
+                              HS#.hMhHSM  hMh                                                                 
+                               3h3HS#SH                                                                       
+                                   3h3                                                                        
+                                                                                                              
+                                                                                                              
+                                                                                                              
+                                                                                                              
+                                                                                                              
+                                                                                    [h] help  [q] quit        
+                                                                                                              
