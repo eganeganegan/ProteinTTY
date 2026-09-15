@@ -374,8 +374,8 @@ void Renderer::drawHelp() {
         "PROTEIN TTY CONTROLS", "", "Arrows / WASD   rotate", "Z / E           roll", "+ / -           zoom",
         "R               reset camera", "P               projection", "1..5            render mode",
         "C               color mode", "[ / ]           select residue", "O               inspect center atom",
-        "I               info panel", "S               sequence", "Space           autorotate", "X               save snapshot",
-        "H / Escape      close help", "Q               quit"};
+        "I               info panel", "S               sequence", ":               command console",
+        "Space           autorotate", "X               save snapshot", "H / Escape      close help", "Q               quit"};
     int y = top + 2;
     for (const auto* line : lines) {
         if (y >= top + boxHeight - 1) break;
@@ -383,6 +383,14 @@ void Renderer::drawHelp() {
         framebuffer_.text(left + 3, y, line, color);
         ++y;
     }
+}
+
+void Renderer::drawCommandStatus(const RenderSettings& settings) {
+    if (!settings.commandActive && settings.commandMessage.empty()) return;
+    const int y = framebuffer_.height() - 1;
+    framebuffer_.text(0, y, std::string(static_cast<std::size_t>(framebuffer_.width()), ' '));
+    const std::string text = settings.commandActive ? ":" + settings.commandLine : settings.commandMessage;
+    framebuffer_.text(0, y, text, settings.commandActive ? 96 : 93);
 }
 
 const Framebuffer& Renderer::render(const Camera& camera, const RenderSettings& settings, int width, int height) {
@@ -424,6 +432,7 @@ const Framebuffer& Renderer::render(const Camera& camera, const RenderSettings& 
     renderingBraille_ = false;
     drawPanels(camera, settings, viewWidth);
     if (settings.showHelp) drawHelp();
+    drawCommandStatus(settings);
     return framebuffer_;
 }
 

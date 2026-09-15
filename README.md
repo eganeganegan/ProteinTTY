@@ -57,6 +57,8 @@ Braille backend is in [`assets/ubiquitin-braille.txt`](assets/ubiquitin-braille.
 - Spatially indexed covalent-radius bond inference restricted to nearby residues
 - Full string chain identifiers for modern mmCIF assemblies
 - Live metadata, residue selection, center-nearest atom inspection, local sequence display, and a help overlay
+- Interactive `:` command console with history, quoted values, chaining, help, and query output
+- Repeatable `--command` automation and reusable `.ptty` command scripts
 - Validated `--pdb ID` downloads with an XDG-compatible local RCSB cache
 - Autorotation, clean screensaver mode, resize handling, and plain-text snapshots
 - RAII terminal restoration after normal exits and caught exceptions; signal-aware shutdown for `SIGINT` and `SIGTERM`
@@ -104,6 +106,8 @@ Select an initial presentation:
 ./build/ascii-protein --pdb 4HHB --renderer braille
 ./build/ascii-protein --pdb 4HHB --format cif --renderer braille
 ./build/ascii-protein examples/1crn.pdb --spin
+./build/ascii-protein examples/1crn.pdb --script examples/presentation.ptty
+./build/ascii-protein examples/1crn.pdb --command "show cartoon; color secondary; set renderer braille"
 ```
 
 Create deterministic output for files, scripts, or CI:
@@ -133,11 +137,45 @@ When standard input or output is not a TTY, ProteinTTY renders one frame and exi
 | `O` | Toggle inspection of the atom nearest the viewport center |
 | `I` | Toggle information panel |
 | `Shift+S` | Toggle local sequence panel |
+| `:` | Open command console |
 | `Space` | Toggle autorotation |
 | `X` | Save `snapshot-NNN.txt` |
 | `H` | Toggle help |
 | `Escape` | Close help |
 | `Q` | Quit |
+
+## Command Console
+
+Press `:` while viewing a structure, type a command, and press `Enter`. Use `Escape` to cancel, Backspace to edit,
+and Up/Down to recall command history. Multiple commands can be separated with `;`; quoted arguments preserve spaces.
+
+```text
+show atoms|backbone|cartoon|sticks|residues
+color element|chain|residue|bfactor|secondary
+set projection perspective|orthographic
+set renderer cells|braille
+set charset ascii|unicode
+set info on|off|toggle
+set sequence on|off|toggle
+spin on|off|toggle
+zoom 1.5
+rotate yaw|pitch|roll 15
+reset
+count atoms|residues|chains
+list chains
+sequence [chain]
+info
+help [command]
+quit
+```
+
+The same dispatcher powers automation. Query output is written separately from snapshot output, and script lines
+beginning with `#` are comments:
+
+```sh
+ascii-protein examples/1crn.pdb --command "count atoms"
+ascii-protein examples/1crn.pdb --script examples/presentation.ptty
+```
 
 ## Architecture
 
@@ -149,6 +187,7 @@ When standard input or output is not a TTY, ProteinTTY renders one frame and exi
 - `rcsb.cpp`: validated RCSB downloads and atomic local caching through `curl`
 - `terminal.cpp`: POSIX raw mode, alternate-screen lifecycle, resizing, input polling, and arrow-key decoding
 - `cli.cpp` and `main.cpp`: option parsing and the application loop
+- `command.cpp`: shared command tokenization, dispatch, queries, scripts, and interactive-console behavior
 
 `coordinate_frame_source.hpp` defines the format-independent frame producer contract for future trajectory playback,
 without coupling trajectory formats to rendering or terminal handling.
@@ -158,7 +197,7 @@ without coupling trajectory formats to rendering or terminal handling.
 The dependency-free test executable covers vector operations, rotation, fixed-column parsing, malformed records,
 alternate conformer selection, mmCIF loop/quote handling, coordinate centering, residue/chain grouping, secondary
 structure, amino-acid conversion, spatial bond inference equivalence, RCSB cache behavior, projection, atom inspection,
-full mmCIF chain identifiers, and both renderers.
+full mmCIF chain identifiers, command parsing/dispatch, and both renderers.
 
 ```sh
 ctest --test-dir build --output-on-failure
@@ -199,48 +238,35 @@ timings vary by compiler, hardware, and terminal dimensions.
 
 ## Next Steps
 
-### Command Console
+### Selection Commands
 
-Add an interactive command console alongside the existing key bindings, following the workflow of molecular viewers
-such as PyMOL, ChimeraX, Jmol, and VMD. Pressing `:` would open a prompt at the bottom of the viewer; `Escape` would
-cancel it and `Enter` would execute the command. Commands should also be accepted non-interactively through repeated
-`--command` options and script files.
-
-Planned command families:
+Extend the command console with molecular selections inspired by PyMOL, ChimeraX, Jmol, and VMD:
 
 ```text
-show atoms
-show backbone
-show cartoon
 hide solvent
-color element
 color chain A cyan
 select active chain A and resi 10-24
 select acidic resn ASP+GLU
 center active
 zoom active
 inspect chain A and resi 14 and name CA
-set projection orthographic
-set renderer braille
 set background black
 load structure.cif
 fetch 4HHB format cif
 save snapshot.txt
-spin on
 help select
 ```
 
-The first implementation should provide:
+The next command phase should provide:
 
 1. A tokenizer and parser with quoted strings, command chaining, useful source positions, and recoverable errors.
-2. A small selection language covering `all`, chain, residue number/range, residue name, atom name, element, hetero,
+2. A selection expression parser covering `all`, chain, residue number/range, residue name, atom name, element, hetero,
   solvent, and boolean `and`/`or`/`not` expressions.
 3. Named selections that can drive visibility, coloring, centering, inspection, and future measurements.
-4. Command history, Up/Down recall, tab completion, inline errors, and a discoverable `help <command>` system.
-5. A shared command dispatcher used by the interactive prompt, `--command`, and `.ptty` script files so behavior is
-  consistent in terminals, demos, and automation.
-6. Read-only query commands such as `count`, `list chains`, `sequence`, `distance`, and `info` whose output can be
-  captured without launching the interactive viewer.
+4. Tab completion for commands, settings, selection keywords, and names.
+5. Structure mutation commands such as `load`, `fetch`, and `save`, with safe renderer reconstruction.
+6. Measurement commands such as `distance`, `angle`, and `dihedral` whose output can be captured without launching
+  the interactive viewer.
 
 Follow-on roadmap items are geometry-based secondary-structure fallback, XYZ trajectory playback behind the
 coordinate-frame source interface, native Windows terminal support, and BinaryCIF loading.

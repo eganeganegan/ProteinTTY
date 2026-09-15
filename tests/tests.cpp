@@ -1,3 +1,5 @@
+#include "ascii_protein/command.hpp"
+#include "ascii_protein/cli.hpp"
 #include "ascii_protein/geometry.hpp"
 #include "ascii_protein/mmcif_parser.hpp"
 #include "ascii_protein/pdb_parser.hpp"
@@ -59,6 +61,12 @@ void testGeometry() {
     require(near(length(Vec3{3, 4, 0}), 5.0), "vector length");
     const Vec3 rotated = Mat3::rotationZ(radians(90.0)) * x;
     require(near(rotated.x, 0.0) && near(rotated.y, 1.0), "z rotation");
+
+    Camera camera;
+    camera.rotate(725.0, -735.0, 540.0);
+    require(near(camera.yaw, -20.0), "yaw wraps after full rotations");
+    require(near(camera.pitch, 0.0), "pitch wraps after full rotations");
+    require(near(camera.roll, -180.0), "roll wraps after full rotations");
 }
 
 void testParserAndModel() {
@@ -223,6 +231,68 @@ void testSpatialBondInference() {
     require(actual == bruteForceBonds(structure), "spatial bond inference equivalence");
 }
 
+void testCommands() {
+    ascii_protein::Structure structure;
+    structure.sourceName = "command fixture";
+    ascii_protein::Atom atom;
+    atom.serial = 1;
+    atom.name = "CA";
+    atom.element = "C";
+    atom.residueName = "GLY";
+    atom.residueNumber = 1;
+    atom.chain = "LONG CHAIN";
+    atom.occupancy = 1.0;
+    structure.atoms.push_back(atom);
+    structure.finalize();
+    ascii_protein::Camera camera;
+    ascii_protein::RenderSettings render;
+    bool autorotate = false;
+    bool running = true;
+    ascii_protein::CommandState state{camera, render, structure, autorotate, running};
+
+    const auto result = ascii_protein::executeCommands(
+        "show cartoon; color secondary; set renderer braille; set projection ortho; spin on; rotate yaw 10; "
+        "zoom 2.5; sequence 'LONG CHAIN'; count atoms",
+        state);
+    require(result.success, "command chain execution");
+    require(render.mode == ascii_protein::RenderMode::alphaTrace, "show command");
+    require(render.colorMode == ascii_protein::ColorMode::secondary, "color command");
+    require(render.backend == ascii_protein::RendererBackend::braille, "renderer command");
+    require(camera.projection == ascii_protein::Projection::orthographic, "projection command");
+    require(autorotate && near(camera.yaw, -15.0) && near(camera.zoom, 2.5), "numeric and toggle commands");
+    require(result.output.size() == 2 && result.output[0] == "G" && result.output[1] == "1", "query commands");
+
+    const auto wrapped = ascii_protein::executeCommands("rotate pitch 1080; rotate yaw -720", state);
+    require(wrapped.success && near(camera.pitch, 15.0) && near(camera.yaw, -15.0), "command rotations wrap");
+
+    const auto invalid = ascii_protein::executeCommands("show 'unterminated", state);
+    require(!invalid.success && invalid.output.front().find("column 6") != std::string::npos,
+            "positioned command error");
+}
+
+void testCommandCliOptions() {
+    char executable[] = "ascii-protein";
+    char input[] = "model.pdb";
+    char commandOption[] = "--command";
+    char firstCommand[] = "show cartoon";
+    char scriptOption[] = "--script";
+    char script[] = "demo.ptty";
+    char secondCommand[] = "count atoms";
+    char* arguments[] = {
+        executable, input, commandOption, firstCommand, scriptOption, script, commandOption, secondCommand};
+    const auto options = ascii_protein::parseCli(8, arguments);
+    require(options.commands.size() == 2 && options.commands[1] == "count atoms", "repeatable command options");
+    require(options.scripts.size() == 1 && options.scripts[0] == "demo.ptty", "script option");
+
+    char* missingValue[] = {executable, input, commandOption};
+    try {
+        static_cast<void>(ascii_protein::parseCli(3, missingValue));
+        require(false, "missing command value rejected");
+    } catch (const std::runtime_error& error) {
+        require(std::string(error.what()).find("missing value") != std::string::npos, "missing command value error");
+    }
+}
+
 } // namespace
 
 int main() {
@@ -233,6 +303,8 @@ int main() {
         testMmcifParser();
         testRcsbCache();
         testSpatialBondInference();
+        testCommands();
+        testCommandCliOptions();
         std::cout << "All tests passed\n";
         return 0;
     } catch (const std::exception& error) {

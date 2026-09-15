@@ -10,7 +10,10 @@
 
 namespace ascii_protein {
 
-struct Terminal::State { termios original{}; };
+struct Terminal::State {
+    termios original{};
+    std::string pending;
+};
 
 bool Terminal::interactive() { return isatty(STDIN_FILENO) && isatty(STDOUT_FILENO); }
 
@@ -54,22 +57,30 @@ TerminalSize Terminal::size() const {
 }
 
 KeyEvent Terminal::readKey(int timeoutMilliseconds) const {
-    pollfd descriptor{STDIN_FILENO, POLLIN, 0};
-    const int result = poll(&descriptor, 1, timeoutMilliseconds);
-    if (result <= 0 || !(descriptor.revents & POLLIN)) return {};
-    char bytes[16]{};
-    const auto count = ::read(STDIN_FILENO, bytes, sizeof(bytes));
-    if (count <= 0) return {};
-    if (bytes[0] == '\x1b') {
-        if (count >= 3 && bytes[1] == '[') {
-            if (bytes[2] == 'A') return {Key::up};
-            if (bytes[2] == 'B') return {Key::down};
-            if (bytes[2] == 'C') return {Key::right};
-            if (bytes[2] == 'D') return {Key::left};
+    if (state_->pending.empty()) {
+        pollfd descriptor{STDIN_FILENO, POLLIN, 0};
+        const int result = poll(&descriptor, 1, timeoutMilliseconds);
+        if (result <= 0 || !(descriptor.revents & POLLIN)) return {};
+        char bytes[64]{};
+        const auto count = ::read(STDIN_FILENO, bytes, sizeof(bytes));
+        if (count <= 0) return {};
+        state_->pending.append(bytes, static_cast<std::size_t>(count));
+    }
+    if (state_->pending.front() == '\x1b') {
+        if (state_->pending.size() >= 3 && state_->pending[1] == '[') {
+            const char direction = state_->pending[2];
+            state_->pending.erase(0, 3);
+            if (direction == 'A') return {Key::up};
+            if (direction == 'B') return {Key::down};
+            if (direction == 'C') return {Key::right};
+            if (direction == 'D') return {Key::left};
         }
+        state_->pending.erase(0, 1);
         return {Key::escape};
     }
-    return {Key::character, bytes[0]};
+    const char character = state_->pending.front();
+    state_->pending.erase(0, 1);
+    return {Key::character, character};
 }
 
 void Terminal::present(std::string_view frame) const {

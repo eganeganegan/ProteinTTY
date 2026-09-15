@@ -27,6 +27,9 @@ struct RenderSettings {
     bool showHelp{false};
     std::size_t selectedResidue{};
     std::optional<std::size_t> inspectedAtom;
+    bool commandActive{};
+    std::string commandLine;
+    std::string commandMessage;
 };
 
 struct ProjectedPoint {
@@ -75,6 +78,7 @@ private:
     void composeBraille(int viewWidth, int height);
     void drawPanels(const Camera& camera, const RenderSettings& settings, int viewWidth);
     void drawHelp();
+    void drawCommandStatus(const RenderSettings& settings);
 
     const Structure& structure_;
     Framebuffer framebuffer_{1, 1};

@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace ascii_protein {
 
@@ -20,6 +21,8 @@ struct CliOptions {
     bool version{};
     int width{100};
     int height{32};
+    std::vector<std::string> commands;
+    std::vector<std::filesystem::path> scripts;
 };
 
 CliOptions parseCli(int argc, char** argv);

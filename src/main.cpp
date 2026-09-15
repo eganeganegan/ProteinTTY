@@ -1,16 +1,20 @@
 #include "ascii_protein/cli.hpp"
+#include "ascii_protein/command.hpp"
 #include "ascii_protein/pdb_parser.hpp"
 #include "ascii_protein/rcsb.hpp"
 #include "ascii_protein/structure_loader.hpp"
 #include "ascii_protein/terminal.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <csignal>
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -29,6 +33,94 @@ void saveSnapshot(const ascii_protein::Framebuffer& framebuffer, int& number) {
     output << framebuffer.toPlainText() << '\n';
 }
 
+std::string joinOutput(const ascii_protein::CommandResult& result) {
+    std::string output;
+    for (const auto& line : result.output) {
+        if (!output.empty()) output += " | ";
+        output += line;
+    }
+    return output;
+}
+
+struct ConsoleState {
+    bool active{};
+    std::string input;
+    std::string message;
+    std::vector<std::string> history;
+    std::size_t historyIndex{};
+};
+
+bool handleConsoleKey(const ascii_protein::KeyEvent& event, ConsoleState& console,
+                      ascii_protein::CommandState commandState) {
+    using ascii_protein::Key;
+    if (event.key == Key::escape) {
+        console.active = false;
+        console.input.clear();
+        return true;
+    }
+    if (event.key == Key::up && !console.history.empty()) {
+        if (console.historyIndex > 0) --console.historyIndex;
+        console.input = console.history[console.historyIndex];
+        return true;
+    }
+    if (event.key == Key::down && !console.history.empty()) {
+        if (console.historyIndex + 1 < console.history.size()) {
+            console.input = console.history[++console.historyIndex];
+        } else {
+            console.historyIndex = console.history.size();
+            console.input.clear();
+        }
+        return true;
+    }
+    if (event.key != Key::character) return true;
+    if (event.character == '\r' || event.character == '\n') {
+        if (!console.input.empty()) {
+            const auto result = ascii_protein::executeCommands(console.input, commandState);
+            console.message = result.success ? joinOutput(result) : "Error: " + joinOutput(result);
+            if (console.message.empty()) console.message = "OK";
+            if (console.history.empty() || console.history.back() != console.input) console.history.push_back(console.input);
+        }
+        console.historyIndex = console.history.size();
+        console.input.clear();
+        console.active = false;
+        return true;
+    }
+    if (event.character == 127 || event.character == '\b') {
+        if (!console.input.empty()) console.input.pop_back();
+        return true;
+    }
+    if (std::isprint(static_cast<unsigned char>(event.character))) console.input.push_back(event.character);
+    return true;
+}
+
+ascii_protein::CommandResult runInitialCommands(const ascii_protein::CliOptions& options,
+                                                ascii_protein::CommandState state) {
+    ascii_protein::CommandResult combined;
+    const auto run = [&](const std::string& command) {
+        const auto result = ascii_protein::executeCommands(command, state);
+        combined.output.insert(combined.output.end(), result.output.begin(), result.output.end());
+        if (!result.success) combined.success = false;
+        return result.success;
+    };
+    for (const auto& path : options.scripts) {
+        std::ifstream input(path);
+        if (!input) throw std::runtime_error("cannot open command script: " + path.string());
+        std::string line;
+        std::size_t lineNumber = 0;
+        while (std::getline(input, line)) {
+            ++lineNumber;
+            const auto first = line.find_first_not_of(" \t");
+            if (first == std::string::npos || line[first] == '#') continue;
+            if (!run(line)) throw std::runtime_error(path.string() + ":" + std::to_string(lineNumber) + ": " +
+                                                     combined.output.back());
+        }
+    }
+    for (const auto& command : options.commands) {
+        if (!run(command)) throw std::runtime_error("command: " + combined.output.back());
+    }
+    return combined;
+}
+
 void applyKey(const ascii_protein::KeyEvent& event, ascii_protein::Camera& camera,
               ascii_protein::RenderSettings& settings, std::size_t residueCount, bool& running, bool& autorotate,
               const ascii_protein::Framebuffer& framebuffer, int& snapshotNumber,
@@ -37,21 +129,21 @@ void applyKey(const ascii_protein::KeyEvent& event, ascii_protein::Camera& camer
     using ascii_protein::Key;
     using ascii_protein::Projection;
     using ascii_protein::RenderMode;
-    if (event.key == Key::left) camera.yaw -= 5.0;
-    if (event.key == Key::right) camera.yaw += 5.0;
-    if (event.key == Key::up) camera.pitch -= 5.0;
-    if (event.key == Key::down) camera.pitch += 5.0;
+    if (event.key == Key::left) camera.rotate(-5.0, 0.0);
+    if (event.key == Key::right) camera.rotate(5.0, 0.0);
+    if (event.key == Key::up) camera.rotate(0.0, -5.0);
+    if (event.key == Key::down) camera.rotate(0.0, 5.0);
     if (event.key == Key::escape) settings.showHelp = false;
     if (event.key != Key::character) return;
 
     switch (event.character) {
     case 'q': case 'Q': running = false; break;
-    case 'a': case 'A': camera.yaw -= 5.0; break;
-    case 'd': case 'D': camera.yaw += 5.0; break;
-    case 'w': case 'W': camera.pitch -= 5.0; break;
-    case 's': camera.pitch += 5.0; break;
-    case 'z': case 'Z': camera.roll -= 5.0; break;
-    case 'e': case 'E': camera.roll += 5.0; break;
+    case 'a': case 'A': camera.rotate(-5.0, 0.0); break;
+    case 'd': case 'D': camera.rotate(5.0, 0.0); break;
+    case 'w': case 'W': camera.rotate(0.0, -5.0); break;
+    case 's': camera.rotate(0.0, 5.0); break;
+    case 'z': case 'Z': camera.rotate(0.0, 0.0, -5.0); break;
+    case 'e': case 'E': camera.rotate(0.0, 0.0, 5.0); break;
     case '+': case '=': camera.zoom = std::min(8.0, camera.zoom * 1.12); break;
     case '-': case '_': camera.zoom = std::max(0.15, camera.zoom / 1.12); break;
     case 'r': case 'R': camera.reset(); break;
@@ -109,8 +201,17 @@ int main(int argc, char** argv) {
         ascii_protein::Renderer renderer(structure);
         ascii_protein::Camera camera;
         camera.projection = options.projection;
+        bool running = true;
+        bool autorotate = options.spin;
+        ascii_protein::CommandState commandState{camera, options.render, structure, autorotate, running};
+        const auto initialCommands = runInitialCommands(options, commandState);
+        if (!running) {
+            for (const auto& line : initialCommands.output) std::cout << line << '\n';
+            return 0;
+        }
 
         if (options.snapshot || !ascii_protein::Terminal::interactive()) {
+            for (const auto& line : initialCommands.output) std::cerr << line << '\n';
             const auto& frame = renderer.render(camera, options.render, options.width, options.height);
             std::cout << frame.toString(options.render.color && !options.snapshot) << '\n';
             return 0;
@@ -119,16 +220,19 @@ int main(int argc, char** argv) {
         std::signal(SIGINT, handleInterrupt);
         std::signal(SIGTERM, handleInterrupt);
         ascii_protein::Terminal terminal;
-        bool running = true;
-        bool autorotate = options.spin;
         int snapshotNumber = 1;
+        ConsoleState console;
+        console.message = joinOutput(initialCommands);
         auto previous = std::chrono::steady_clock::now();
         while (running && !interrupted) {
             const auto now = std::chrono::steady_clock::now();
             const double elapsed = std::chrono::duration<double>(now - previous).count();
             previous = now;
-            if (autorotate) camera.yaw += elapsed * 24.0;
+            if (autorotate) camera.rotate(elapsed * 24.0, 0.0);
             const auto dimensions = terminal.size();
+            options.render.commandActive = console.active;
+            options.render.commandLine = console.input;
+            options.render.commandMessage = console.message;
             const auto& frame = renderer.render(camera, options.render, dimensions.width, dimensions.height);
             if (dimensions.width < 20 || dimensions.height < 8) {
                 terminal.present("Terminal too small (minimum 20x8). Resize or press q.");
@@ -137,6 +241,17 @@ int main(int argc, char** argv) {
             }
             const auto event = terminal.readKey(autorotate ? 33 : 100);
             if (options.spin && event.key != ascii_protein::Key::none) break;
+            if (console.active) {
+                handleConsoleKey(event, console, commandState);
+                continue;
+            }
+            if (event.key == ascii_protein::Key::character && event.character == ':') {
+                console.active = true;
+                console.input.clear();
+                console.message.clear();
+                console.historyIndex = console.history.size();
+                continue;
+            }
             const auto centerAtom = renderer.nearestAtom(camera, options.render, dimensions.width, dimensions.height);
             applyKey(event, camera, options.render, structure.residues.size(), running, autorotate, frame,
                      snapshotNumber, centerAtom);

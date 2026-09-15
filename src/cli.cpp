@@ -47,6 +47,8 @@ CliOptions parseCli(int argc, char** argv) {
         const std::string argument = argv[index];
         if (argument == "--help" || argument == "-h") options.help = true;
         else if (argument == "--version") options.version = true;
+        else if (argument == "--command") options.commands.push_back(requireValue(index, argc, argv, argument));
+        else if (argument == "--script") options.scripts.emplace_back(requireValue(index, argc, argv, argument));
         else if (argument == "--pdb") options.pdbId = requireValue(index, argc, argv, argument);
         else if (argument == "--format") {
             const auto value = requireValue(index, argc, argv, argument);
@@ -91,6 +93,8 @@ std::string helpText() {
         "ProteinTTY - interactive terminal protein viewer\n\n"
         "Usage: ascii-protein <structure.pdb|structure.cif> [options]\n\n"
         "Options:\n"
+        "  --command TEXT   Execute a viewer command (repeatable)\n"
+        "  --script FILE    Execute commands from a .ptty script\n"
         "  --pdb ID         Download and cache a structure from RCSB\n"
         "  --format pdb|cif Remote structure format (default pdb)\n"
         "  --mode atoms|backbone|ca|ball-stick|residue\n"

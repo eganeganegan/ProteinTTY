@@ -1,0 +1,7 @@
+# A high-resolution secondary-structure presentation.
+show cartoon
+color secondary
+set renderer braille
+set projection orthographic
+set info on
+spin on
