@@ -18,7 +18,7 @@ struct Atom {
     std::string residueName;
     int residueNumber{};
     char insertionCode{' '};
-    char chain{' '};
+    std::string chain;
     Vec3 position;
     double occupancy{};
     double bFactor{};
@@ -30,21 +30,21 @@ struct Residue {
     std::string name;
     int number{};
     char insertionCode{' '};
-    char chain{' '};
+    std::string chain;
     std::vector<std::size_t> atomIndices;
     SecondaryStructure secondary{SecondaryStructure::coil};
 };
 
 struct Chain {
-    char id{' '};
+    std::string id;
     std::vector<std::size_t> residueIndices;
 };
 
 struct SecondaryRange {
     SecondaryStructure type{SecondaryStructure::coil};
-    char startChain{' '};
+    std::string startChain;
     int startResidue{};
-    char endChain{' '};
+    std::string endChain;
     int endResidue{};
 };
 

@@ -11,7 +11,7 @@ namespace ascii_protein {
 namespace {
 
 void selectAlternateConformers(std::vector<Atom>& source) {
-    using AtomKey = std::tuple<bool, char, int, char, std::string, std::string>;
+    using AtomKey = std::tuple<bool, std::string, int, char, std::string, std::string>;
     std::map<AtomKey, std::size_t> selected;
     std::vector<Atom> atoms;
     atoms.reserve(source.size());
@@ -66,8 +66,8 @@ void Structure::finalize() {
 
     residues.clear();
     chains.clear();
-    std::map<std::tuple<char, int, char>, std::size_t> residueLookup;
-    std::map<char, std::size_t> chainLookup;
+    std::map<std::tuple<std::string, int, char>, std::size_t> residueLookup;
+    std::map<std::string, std::size_t> chainLookup;
     for (std::size_t atomIndex = 0; atomIndex < atoms.size(); ++atomIndex) {
         auto& atom = atoms[atomIndex];
         const auto residueKey = std::make_tuple(atom.chain, atom.residueNumber, atom.insertionCode);

@@ -54,7 +54,8 @@ Braille backend is in [`assets/ubiquitin-braille.txt`](assets/ubiquitin-braille.
 - Unicode, portable ASCII, and depth-tested 2x4 subcell Braille rendering
 - Element, chain, residue class, B-factor, and secondary-structure color modes
 - Atom, backbone, C-alpha trace, ball-and-stick, and one-point-per-residue modes
-- Covalent-radius bond inference restricted to nearby residues
+- Spatially indexed covalent-radius bond inference restricted to nearby residues
+- Full string chain identifiers for modern mmCIF assemblies
 - Live metadata, residue selection, center-nearest atom inspection, local sequence display, and a help overlay
 - Validated `--pdb ID` downloads with an XDG-compatible local RCSB cache
 - Autorotation, clean screensaver mode, resize handling, and plain-text snapshots
@@ -70,17 +71,20 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-Install to the platform's normal prefix:
-
-```sh
-cmake --install build
-```
-
-Use `--prefix` to install somewhere else:
+Install for the current user without elevated permissions:
 
 ```sh
 cmake --install build --prefix "$HOME/.local"
 ```
+
+Ensure `$HOME/.local/bin` is on `PATH` (it already is on many systems):
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Running `cmake --install build` without `--prefix` uses CMake's default `/usr/local` prefix. On systems where
+`/usr/local` is owned by `root`, that command requires administrator access; the user-local command above avoids it.
 
 ## Usage
 
@@ -141,7 +145,7 @@ When standard input or output is not a TTY, ProteinTTY renders one frame and exi
 - `pdb_parser.cpp` and `mmcif_parser.cpp`: fixed-column PDB and tag-indexed mmCIF ingestion
 - `structure_loader.cpp` and `structure.cpp`: format dispatch, conformer selection, hierarchy, centering, and bounds
 - `framebuffer.cpp`: Unicode cells, ANSI serialization, and software depth buffer
-- `renderer.cpp`: projection, lines, atom discs, lighting, bonds, palettes, and panels
+- `renderer.cpp`: projection, lines, atom discs, lighting, spatially indexed bonds, palettes, and panels
 - `rcsb.cpp`: validated RCSB downloads and atomic local caching through `curl`
 - `terminal.cpp`: POSIX raw mode, alternate-screen lifecycle, resizing, input polling, and arrow-key decoding
 - `cli.cpp` and `main.cpp`: option parsing and the application loop
@@ -153,7 +157,8 @@ without coupling trajectory formats to rendering or terminal handling.
 
 The dependency-free test executable covers vector operations, rotation, fixed-column parsing, malformed records,
 alternate conformer selection, mmCIF loop/quote handling, coordinate centering, residue/chain grouping, secondary
-structure, amino-acid conversion, bond inference, RCSB cache behavior, projection, atom inspection, and both renderers.
+structure, amino-acid conversion, spatial bond inference equivalence, RCSB cache behavior, projection, atom inspection,
+full mmCIF chain identifiers, and both renderers.
 
 ```sh
 ctest --test-dir build --output-on-failure
@@ -184,13 +189,61 @@ Remote loading requires `curl`. Downloads are cached under `$XDG_CACHE_HOME/asci
 - Bond inference is intentionally approximate and does not model bond order or exhaustive ligand chemistry.
 - Secondary structure requires PDB annotations; there is no geometry-based DSSP replacement.
 - Terminal input is POSIX-specific; native Windows consoles are not currently supported.
-- Multi-character mmCIF chain IDs are currently represented by their first character.
 - The coordinate-frame interface is present, but no trajectory file reader or playback UI is implemented yet.
+
+## Performance
+
+Bond candidates are found through a 3D spatial hash rather than an all-pairs scan. On the development Mac, parsing and
+rendering the 772 KB `4HHB.cif` hemoglobin structure in ball-and-stick mode takes approximately 0.10 seconds. Exact
+timings vary by compiler, hardware, and terminal dimensions.
 
 ## Next Steps
 
-The strongest additions would be spatially indexed bond inference for very large structures, full string chain IDs,
-geometry-based secondary-structure fallback, and XYZ trajectory playback behind the coordinate-frame source interface.
+### Command Console
+
+Add an interactive command console alongside the existing key bindings, following the workflow of molecular viewers
+such as PyMOL, ChimeraX, Jmol, and VMD. Pressing `:` would open a prompt at the bottom of the viewer; `Escape` would
+cancel it and `Enter` would execute the command. Commands should also be accepted non-interactively through repeated
+`--command` options and script files.
+
+Planned command families:
+
+```text
+show atoms
+show backbone
+show cartoon
+hide solvent
+color element
+color chain A cyan
+select active chain A and resi 10-24
+select acidic resn ASP+GLU
+center active
+zoom active
+inspect chain A and resi 14 and name CA
+set projection orthographic
+set renderer braille
+set background black
+load structure.cif
+fetch 4HHB format cif
+save snapshot.txt
+spin on
+help select
+```
+
+The first implementation should provide:
+
+1. A tokenizer and parser with quoted strings, command chaining, useful source positions, and recoverable errors.
+2. A small selection language covering `all`, chain, residue number/range, residue name, atom name, element, hetero,
+  solvent, and boolean `and`/`or`/`not` expressions.
+3. Named selections that can drive visibility, coloring, centering, inspection, and future measurements.
+4. Command history, Up/Down recall, tab completion, inline errors, and a discoverable `help <command>` system.
+5. A shared command dispatcher used by the interactive prompt, `--command`, and `.ptty` script files so behavior is
+  consistent in terminals, demos, and automation.
+6. Read-only query commands such as `count`, `list chains`, `sequence`, `distance`, and `info` whose output can be
+  captured without launching the interactive viewer.
+
+Follow-on roadmap items are geometry-based secondary-structure fallback, XYZ trajectory playback behind the
+coordinate-frame source interface, native Windows terminal support, and BinaryCIF loading.
 
 ## License
 

@@ -122,8 +122,7 @@ void parseAtomRow(const std::vector<std::string>& row,
     atom.element = value(row, columns, {"_atom_site.type_symbol"});
     atom.residueName = value(row, columns, {"_atom_site.auth_comp_id", "_atom_site.label_comp_id"});
     const std::string chain = value(row, columns, {"_atom_site.auth_asym_id", "_atom_site.label_asym_id"});
-    atom.chain = marker(chain);
-    if (chain.size() > 1) structure.warnings.push_back("multi-character chain ID truncated: " + chain);
+    atom.chain = chain;
     atom.residueNumber = *residueNumber;
     atom.insertionCode = marker(value(row, columns, {"_atom_site.pdbx_PDB_ins_code"}));
     atom.position = {*x, *y, *z};
@@ -151,7 +150,7 @@ void parseSecondaryRow(const std::vector<std::string>& row,
         row, columns, {prefix + "end_auth_seq_id", prefix + "end_label_seq_id"}));
     if (!startResidue || !endResidue || startChain.empty() || endChain.empty()) return;
     structure.secondaryRanges.push_back(
-        {type, startChain.front(), *startResidue, endChain.front(), *endResidue});
+        {type, startChain, *startResidue, endChain, *endResidue});
 }
 
 } // namespace

@@ -27,6 +27,11 @@ char character(const std::string& line, std::size_t offset) {
     return offset < line.size() ? line[offset] : ' ';
 }
 
+std::string chainId(const std::string& line, std::size_t offset) {
+    const char value = character(line, offset);
+    return value == ' ' ? std::string{} : std::string(1, value);
+}
+
 std::optional<int> parseInteger(std::string_view text) {
     const std::string value = trim(text);
     if (value.empty()) {
@@ -79,7 +84,7 @@ Structure PdbParser::parse(std::istream& input, std::string sourceName) {
             const auto end = parseInteger(field(line, 33, 4));
             if (start && end) {
                 structure.secondaryRanges.push_back(
-                    {SecondaryStructure::helix, character(line, 19), *start, character(line, 31), *end});
+                    {SecondaryStructure::helix, chainId(line, 19), *start, chainId(line, 31), *end});
             }
             continue;
         }
@@ -88,7 +93,7 @@ Structure PdbParser::parse(std::istream& input, std::string sourceName) {
             const auto end = parseInteger(field(line, 33, 4));
             if (start && end) {
                 structure.secondaryRanges.push_back(
-                    {SecondaryStructure::sheet, character(line, 21), *start, character(line, 32), *end});
+                    {SecondaryStructure::sheet, chainId(line, 21), *start, chainId(line, 32), *end});
             }
             continue;
         }
@@ -111,7 +116,7 @@ Structure PdbParser::parse(std::istream& input, std::string sourceName) {
         atom.name = trim(field(line, 12, 4));
         atom.alternateLocation = character(line, 16);
         atom.residueName = trim(field(line, 17, 3));
-        atom.chain = character(line, 21);
+        atom.chain = chainId(line, 21);
         atom.residueNumber = *residueNumber;
         atom.insertionCode = character(line, 26);
         atom.position = {*x, *y, *z};

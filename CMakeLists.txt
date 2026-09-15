@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ascii_protein VERSION 0.3.0 LANGUAGES CXX)
+project(ascii_protein VERSION 0.4.0 LANGUAGES CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

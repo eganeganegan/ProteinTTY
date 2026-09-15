@@ -5,6 +5,7 @@
 #include <cmath>
 #include <iomanip>
 #include <sstream>
+#include <tuple>
 #include <unordered_map>
 
 namespace ascii_protein {
@@ -49,24 +50,63 @@ std::string secondaryName(SecondaryStructure secondary) {
     return "coil";
 }
 
+std::string displayChain(const std::string& chain) { return chain.empty() ? "-" : chain; }
+
+struct GridCell {
+    int x{};
+    int y{};
+    int z{};
+
+    bool operator==(const GridCell&) const = default;
+};
+
+struct GridCellHash {
+    std::size_t operator()(const GridCell& cell) const {
+        std::size_t hash = std::hash<int>{}(cell.x);
+        hash ^= std::hash<int>{}(cell.y) + 0x9e3779b9U + (hash << 6U) + (hash >> 2U);
+        hash ^= std::hash<int>{}(cell.z) + 0x9e3779b9U + (hash << 6U) + (hash >> 2U);
+        return hash;
+    }
+};
+
+GridCell gridCell(const Vec3& position, double cellSize) {
+    return {static_cast<int>(std::floor(position.x / cellSize)),
+            static_cast<int>(std::floor(position.y / cellSize)),
+            static_cast<int>(std::floor(position.z / cellSize))};
+}
+
 } // namespace
 
 std::vector<Bond> inferBonds(const Structure& structure) {
+    constexpr double cellSize = 2.7;
     std::vector<Bond> bonds;
-    for (std::size_t first = 0; first < structure.atoms.size(); ++first) {
-        for (std::size_t second = first + 1; second < structure.atoms.size(); ++second) {
-            const auto& left = structure.atoms[first];
-            const auto& right = structure.atoms[second];
-            if (!residuesAreAdjacent(left, right)) {
-                continue;
-            }
-            const double distance = length(left.position - right.position);
-            const double threshold = covalentRadius(left.element) + covalentRadius(right.element) + 0.55;
-            if (distance > 0.35 && distance <= threshold) {
-                bonds.push_back({first, second});
+    std::unordered_map<GridCell, std::vector<std::size_t>, GridCellHash> grid;
+    grid.reserve(structure.atoms.size());
+    for (std::size_t second = 0; second < structure.atoms.size(); ++second) {
+        const auto& right = structure.atoms[second];
+        const GridCell cell = gridCell(right.position, cellSize);
+        for (int offsetZ = -1; offsetZ <= 1; ++offsetZ) {
+            for (int offsetY = -1; offsetY <= 1; ++offsetY) {
+                for (int offsetX = -1; offsetX <= 1; ++offsetX) {
+                    const auto found = grid.find({cell.x + offsetX, cell.y + offsetY, cell.z + offsetZ});
+                    if (found == grid.end()) continue;
+                    for (const std::size_t first : found->second) {
+                        const auto& left = structure.atoms[first];
+                        if (!residuesAreAdjacent(left, right)) continue;
+                        const double threshold = covalentRadius(left.element) + covalentRadius(right.element) + 0.55;
+                        const double distanceSquared = dot(left.position - right.position, left.position - right.position);
+                        if (distanceSquared > 0.35 * 0.35 && distanceSquared <= threshold * threshold) {
+                            bonds.push_back({first, second});
+                        }
+                    }
+                }
             }
         }
+        grid[cell].push_back(second);
     }
+    std::sort(bonds.begin(), bonds.end(), [](const Bond& left, const Bond& right) {
+        return std::tie(left.first, left.second) < std::tie(right.first, right.second);
+    });
     return bonds;
 }
 
@@ -115,7 +155,7 @@ int Renderer::atomColor(const Atom& atom, const RenderSettings& settings) const 
     }
     if (settings.colorMode == ColorMode::chain) {
         constexpr std::array<int, 8> colors{36, 33, 35, 32, 93, 34, 91, 96};
-        return colors[static_cast<unsigned char>(atom.chain) % colors.size()];
+        return colors[std::hash<std::string>{}(atom.chain) % colors.size()];
     }
     if (settings.colorMode == ColorMode::bFactor) {
         const double range = std::max(0.001, maxBFactor_ - minBFactor_);
@@ -284,7 +324,7 @@ void Renderer::drawPanels(const Camera& camera, const RenderSettings& settings, 
             framebuffer_.text(x, y++, "INSPECTED ATOM", 96);
             framebuffer_.text(x, y++, atom.name + "  " + atom.element + "  " + atom.residueName +
                                              std::to_string(atom.residueNumber), 97);
-            framebuffer_.text(x, y++, std::string("Chain ") + (atom.chain == ' ' ? '-' : atom.chain) +
+            framebuffer_.text(x, y++, "Chain " + displayChain(atom.chain) +
                                              "  Serial " + std::to_string(atom.serial), 37);
             std::ostringstream position;
             position << std::fixed << std::setprecision(1) << "XYZ " << original.x << ' ' << original.y << ' '
@@ -296,7 +336,7 @@ void Renderer::drawPanels(const Camera& camera, const RenderSettings& settings, 
         } else if (!structure_.residues.empty()) {
             const auto& residue = structure_.residues[std::min(settings.selectedResidue, structure_.residues.size() - 1)];
             framebuffer_.text(x, y++, "SELECTED", 93);
-            framebuffer_.text(x, y++, std::string("Chain ") + (residue.chain == ' ' ? '-' : residue.chain) + "  " +
+            framebuffer_.text(x, y++, "Chain " + displayChain(residue.chain) + "  " +
                                              residue.name + std::to_string(residue.number), 97);
             framebuffer_.text(x, y++, "Atoms: " + std::to_string(residue.atomIndices.size()), 37);
             double average = 0.0;
@@ -317,7 +357,7 @@ void Renderer::drawPanels(const Camera& camera, const RenderSettings& settings, 
         const std::size_t end = std::min(structure_.residues.size(), start + static_cast<std::size_t>(std::max(1, viewWidth - 4)));
         std::string sequence;
         for (std::size_t index = start; index < end; ++index) sequence += oneLetterCode(structure_.residues[index].name);
-        framebuffer_.text(2, y, "Chain " + std::string(1, structure_.residues[selected].chain) + "  " + sequence, 37);
+        framebuffer_.text(2, y, "Chain " + displayChain(structure_.residues[selected].chain) + "  " + sequence, 37);
         framebuffer_.text(9 + static_cast<int>(selected - start), y + 1, "^", 93);
     }
 }

@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -23,6 +24,31 @@ void require(bool condition, const std::string& message) {
 }
 
 bool near(double left, double right) { return std::abs(left - right) < 1e-9; }
+
+std::set<std::pair<std::size_t, std::size_t>> bruteForceBonds(const ascii_protein::Structure& structure) {
+    std::set<std::pair<std::size_t, std::size_t>> result;
+    const auto radius = [](const std::string& element) {
+        if (element == "H") return 0.31;
+        if (element == "C") return 0.76;
+        if (element == "N") return 0.71;
+        if (element == "O") return 0.66;
+        if (element == "S") return 1.05;
+        if (element == "P") return 1.07;
+        return 0.77;
+    };
+    for (std::size_t first = 0; first < structure.atoms.size(); ++first) {
+        for (std::size_t second = first + 1; second < structure.atoms.size(); ++second) {
+            const auto& left = structure.atoms[first];
+            const auto& right = structure.atoms[second];
+            if (left.chain != right.chain || std::abs(left.residueNumber - right.residueNumber) > 1) continue;
+            const double distance = ascii_protein::length(left.position - right.position);
+            if (distance > 0.35 && distance <= radius(left.element) + radius(right.element) + 0.55) {
+                result.emplace(first, second);
+            }
+        }
+    }
+    return result;
+}
 
 void testGeometry() {
     using namespace ascii_protein;
@@ -112,7 +138,7 @@ void testMmcifParser() {
         "_struct_conf.beg_auth_seq_id\n"
         "_struct_conf.end_auth_asym_id\n"
         "_struct_conf.end_auth_seq_id\n"
-        "HELX_P A 7 A 7\n"
+        "HELX_P ALPHA 7 ALPHA 7\n"
         "loop_\n"
         "_struct_sheet_range.beg_auth_asym_id\n"
         "_struct_sheet_range.beg_auth_seq_id\n"
@@ -135,7 +161,7 @@ void testMmcifParser() {
         "_atom_site.B_iso_or_equiv\n"
         "_atom_site.label_alt_id\n"
         "_atom_site.pdbx_PDB_model_num\n"
-        "3.0 ATOM 'CA' 1 C ALA A 7 ? 1.0 2.0 1.0 12.5 . 1\n"
+        "3.0 ATOM 'CA' 1 C ALA ALPHA 7 ? 1.0 2.0 1.0 12.5 . 1\n"
         "6.0 HETATM O 2 O HOH B 8 A 4.0 5.0 ? ? . 1\n"
         "9.0 ATOM N 3 N GLY A bad ? 7.0 8.0 1.0 10.0 . 1\n"
         "12.0 ATOM CA 4 C GLY A 9 ? 10.0 11.0 1.0 10.0 . 2\n"
@@ -143,6 +169,7 @@ void testMmcifParser() {
     const auto structure = ascii_protein::MmcifParser::parse(cif, "fixture.cif");
     require(structure.atoms.size() == 2, "mmCIF atom and model filtering");
     require(structure.atoms[0].name == "CA" && structure.atoms[0].residueNumber == 7, "mmCIF shuffled columns");
+    require(structure.atoms[0].chain == "ALPHA", "mmCIF multi-character chain ID");
     require(structure.atoms[1].hetero && structure.atoms[1].insertionCode == 'A', "mmCIF hetero and insertion");
     require(structure.atoms[1].occupancy == 0.0 && structure.atoms[1].bFactor == 0.0, "mmCIF missing values");
     require(structure.warnings.size() == 1, "mmCIF malformed row warning");
@@ -172,6 +199,30 @@ void testRcsbCache() {
     std::filesystem::remove_all(cache);
 }
 
+void testSpatialBondInference() {
+    ascii_protein::Structure structure;
+    const std::vector<ascii_protein::Vec3> positions{
+        {-5.45, 0.0, 0.0}, {-3.0, 0.0, 0.0}, {-2.65, 0.0, 0.0}, {-1.2, 0.0, 0.0},
+        {0.0, 0.0, 0.0}, {1.45, 0.0, 0.0}, {2.75, 0.0, 0.0}, {8.0, 0.0, 0.0}};
+    for (std::size_t index = 0; index < positions.size(); ++index) {
+        ascii_protein::Atom atom;
+        atom.serial = static_cast<int>(index + 1);
+        atom.name = index % 2 == 0 ? "C" : "N";
+        atom.element = atom.name;
+        atom.residueName = "GLY";
+        atom.residueNumber = static_cast<int>(index / 3) + 1;
+        atom.chain = index == positions.size() - 1 ? "B" : "A";
+        atom.position = positions[index];
+        atom.occupancy = 1.0;
+        structure.atoms.push_back(atom);
+    }
+    structure.finalize();
+    const auto inferred = ascii_protein::inferBonds(structure);
+    std::set<std::pair<std::size_t, std::size_t>> actual;
+    for (const auto& bond : inferred) actual.emplace(bond.first, bond.second);
+    require(actual == bruteForceBonds(structure), "spatial bond inference equivalence");
+}
+
 } // namespace
 
 int main() {
@@ -181,6 +232,7 @@ int main() {
         testAlternateConformers();
         testMmcifParser();
         testRcsbCache();
+        testSpatialBondInference();
         std::cout << "All tests passed\n";
         return 0;
     } catch (const std::exception& error) {
