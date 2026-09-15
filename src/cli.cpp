@@ -48,6 +48,11 @@ CliOptions parseCli(int argc, char** argv) {
         if (argument == "--help" || argument == "-h") options.help = true;
         else if (argument == "--version") options.version = true;
         else if (argument == "--pdb") options.pdbId = requireValue(index, argc, argv, argument);
+        else if (argument == "--format") {
+            const auto value = requireValue(index, argc, argv, argument);
+            if (value != "pdb" && value != "cif") throw std::runtime_error("unknown structure format: " + value);
+            options.fetchCif = value == "cif";
+        }
         else if (argument == "--mode") options.render.mode = parseMode(requireValue(index, argc, argv, argument));
         else if (argument == "--color") options.render.colorMode = parseColor(requireValue(index, argc, argv, argument));
         else if (argument == "--charset") {
@@ -74,6 +79,7 @@ CliOptions parseCli(int argc, char** argv) {
         else options.input = argument;
     }
     if (options.input && options.pdbId) throw std::runtime_error("use either a PDB file or --pdb, not both");
+    if (options.fetchCif && !options.pdbId) throw std::runtime_error("--format is only used with --pdb");
     if (!options.help && !options.version && !options.input && !options.pdbId) {
         throw std::runtime_error("missing PDB file or --pdb ID (try --help)");
     }
@@ -83,9 +89,10 @@ CliOptions parseCli(int argc, char** argv) {
 std::string helpText() {
     return
         "ProteinTTY - interactive terminal protein viewer\n\n"
-        "Usage: ascii-protein <structure.pdb> [options]\n\n"
+        "Usage: ascii-protein <structure.pdb|structure.cif> [options]\n\n"
         "Options:\n"
         "  --pdb ID         Download and cache a structure from RCSB\n"
+        "  --format pdb|cif Remote structure format (default pdb)\n"
         "  --mode atoms|backbone|ca|ball-stick|residue\n"
         "  --color element|chain|residue|bfactor|secondary\n"
         "  --charset ascii|unicode\n"

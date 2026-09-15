@@ -54,16 +54,16 @@ std::string normalizePdbId(std::string_view pdbId) {
     return normalized;
 }
 
-std::filesystem::path fetchPdb(const std::string& pdbId,
-                               std::optional<std::filesystem::path> cacheDirectory) {
+std::filesystem::path fetchFormat(const std::string& pdbId, std::string_view extension,
+                                  std::optional<std::filesystem::path> cacheDirectory) {
     const std::string normalized = normalizePdbId(pdbId);
     const auto directory = cacheDirectory.value_or(defaultCacheDirectory());
     std::filesystem::create_directories(directory);
-    const auto cached = directory / (normalized + ".pdb");
+    const auto cached = directory / (normalized + std::string(extension));
     if (std::filesystem::is_regular_file(cached) && std::filesystem::file_size(cached) > 0) return cached;
 
-    const auto temporary = directory / (normalized + ".pdb.part-" + std::to_string(getpid()));
-    const std::string url = "https://files.rcsb.org/download/" + normalized + ".pdb";
+    const auto temporary = directory / (normalized + std::string(extension) + ".part-" + std::to_string(getpid()));
+    const std::string url = "https://files.rcsb.org/download/" + normalized + std::string(extension);
     try {
         download(url, temporary);
         if (!std::filesystem::is_regular_file(temporary) || std::filesystem::file_size(temporary) == 0) {
@@ -76,6 +76,16 @@ std::filesystem::path fetchPdb(const std::string& pdbId,
         throw;
     }
     return cached;
+}
+
+std::filesystem::path fetchPdb(const std::string& pdbId,
+                               std::optional<std::filesystem::path> cacheDirectory) {
+    return fetchFormat(pdbId, ".pdb", std::move(cacheDirectory));
+}
+
+std::filesystem::path fetchMmcif(const std::string& pdbId,
+                                 std::optional<std::filesystem::path> cacheDirectory) {
+    return fetchFormat(pdbId, ".cif", std::move(cacheDirectory));
 }
 
 } // namespace ascii_protein

@@ -1,8 +1,10 @@
 #include "ascii_protein/geometry.hpp"
+#include "ascii_protein/mmcif_parser.hpp"
 #include "ascii_protein/pdb_parser.hpp"
 #include "ascii_protein/rcsb.hpp"
 #include "ascii_protein/renderer.hpp"
 #include "ascii_protein/structure.hpp"
+#include "ascii_protein/structure_loader.hpp"
 
 #include <cmath>
 #include <filesystem>
@@ -100,6 +102,54 @@ void testAlternateConformers() {
     require(structure.atoms[2].alternateLocation == ' ', "ordinary atom preserved");
 }
 
+void testMmcifParser() {
+    std::istringstream cif(
+        "data_fixture\n"
+        "_entry.details 'O'Brien model'\n"
+        "loop_\n"
+        "_struct_conf.conf_type_id\n"
+        "_struct_conf.beg_auth_asym_id\n"
+        "_struct_conf.beg_auth_seq_id\n"
+        "_struct_conf.end_auth_asym_id\n"
+        "_struct_conf.end_auth_seq_id\n"
+        "HELX_P A 7 A 7\n"
+        "loop_\n"
+        "_struct_sheet_range.beg_auth_asym_id\n"
+        "_struct_sheet_range.beg_auth_seq_id\n"
+        "_struct_sheet_range.end_auth_asym_id\n"
+        "_struct_sheet_range.end_auth_seq_id\n"
+        "B 8 B 8\n"
+        "loop_\n"
+        "_atom_site.Cartn_z\n"
+        "_atom_site.group_PDB\n"
+        "_atom_site.auth_atom_id\n"
+        "_atom_site.id\n"
+        "_atom_site.type_symbol\n"
+        "_atom_site.auth_comp_id\n"
+        "_atom_site.auth_asym_id\n"
+        "_atom_site.auth_seq_id\n"
+        "_atom_site.pdbx_PDB_ins_code\n"
+        "_atom_site.Cartn_x\n"
+        "_atom_site.Cartn_y\n"
+        "_atom_site.occupancy\n"
+        "_atom_site.B_iso_or_equiv\n"
+        "_atom_site.label_alt_id\n"
+        "_atom_site.pdbx_PDB_model_num\n"
+        "3.0 ATOM 'CA' 1 C ALA A 7 ? 1.0 2.0 1.0 12.5 . 1\n"
+        "6.0 HETATM O 2 O HOH B 8 A 4.0 5.0 ? ? . 1\n"
+        "9.0 ATOM N 3 N GLY A bad ? 7.0 8.0 1.0 10.0 . 1\n"
+        "12.0 ATOM CA 4 C GLY A 9 ? 10.0 11.0 1.0 10.0 . 2\n"
+        "#\n");
+    const auto structure = ascii_protein::MmcifParser::parse(cif, "fixture.cif");
+    require(structure.atoms.size() == 2, "mmCIF atom and model filtering");
+    require(structure.atoms[0].name == "CA" && structure.atoms[0].residueNumber == 7, "mmCIF shuffled columns");
+    require(structure.atoms[1].hetero && structure.atoms[1].insertionCode == 'A', "mmCIF hetero and insertion");
+    require(structure.atoms[1].occupancy == 0.0 && structure.atoms[1].bFactor == 0.0, "mmCIF missing values");
+    require(structure.warnings.size() == 1, "mmCIF malformed row warning");
+    require(structure.residues[0].secondary == ascii_protein::SecondaryStructure::helix, "mmCIF helix range");
+    require(structure.residues[1].secondary == ascii_protein::SecondaryStructure::sheet, "mmCIF sheet range");
+}
+
 void testRcsbCache() {
     require(ascii_protein::normalizePdbId("1CrN") == "1crn", "PDB ID normalization");
     bool rejected = false;
@@ -116,6 +166,9 @@ void testRcsbCache() {
     const auto expected = cache / "1crn.pdb";
     std::ofstream(expected) << "cached";
     require(ascii_protein::fetchPdb("1CRN", cache) == expected, "offline cache hit");
+    const auto expectedCif = cache / "1crn.cif";
+    std::ofstream(expectedCif) << "cached cif";
+    require(ascii_protein::fetchMmcif("1CRN", cache) == expectedCif, "offline mmCIF cache hit");
     std::filesystem::remove_all(cache);
 }
 
@@ -126,6 +179,7 @@ int main() {
         testGeometry();
         testParserAndModel();
         testAlternateConformers();
+        testMmcifParser();
         testRcsbCache();
         std::cout << "All tests passed\n";
         return 0;

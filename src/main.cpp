@@ -1,6 +1,7 @@
 #include "ascii_protein/cli.hpp"
 #include "ascii_protein/pdb_parser.hpp"
 #include "ascii_protein/rcsb.hpp"
+#include "ascii_protein/structure_loader.hpp"
 #include "ascii_protein/terminal.hpp"
 
 #include <algorithm>
@@ -100,8 +101,10 @@ int main(int argc, char** argv) {
             return 0;
         }
 
-        const auto input = options.pdbId ? ascii_protein::fetchPdb(*options.pdbId) : *options.input;
-        const auto structure = ascii_protein::PdbParser::parseFile(input);
+        const auto input = options.pdbId ? (options.fetchCif ? ascii_protein::fetchMmcif(*options.pdbId)
+                                    : ascii_protein::fetchPdb(*options.pdbId))
+                         : *options.input;
+        const auto structure = ascii_protein::loadStructure(input);
         for (const auto& warning : structure.warnings) std::cerr << "warning: " << warning << '\n';
         ascii_protein::Renderer renderer(structure);
         ascii_protein::Camera camera;

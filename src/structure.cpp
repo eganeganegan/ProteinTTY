@@ -8,8 +8,34 @@
 #include <unordered_map>
 
 namespace ascii_protein {
+namespace {
+
+void selectAlternateConformers(std::vector<Atom>& source) {
+    using AtomKey = std::tuple<bool, char, int, char, std::string, std::string>;
+    std::map<AtomKey, std::size_t> selected;
+    std::vector<Atom> atoms;
+    atoms.reserve(source.size());
+    for (auto& atom : source) {
+        const AtomKey key{atom.hetero, atom.chain, atom.residueNumber, atom.insertionCode, atom.residueName, atom.name};
+        const auto found = selected.find(key);
+        if (found == selected.end()) {
+            selected.emplace(key, atoms.size());
+            atoms.push_back(std::move(atom));
+            continue;
+        }
+        auto& current = atoms[found->second];
+        const bool higherOccupancy = atom.occupancy > current.occupancy;
+        const bool preferredTie = atom.occupancy == current.occupancy && current.alternateLocation != ' ' &&
+                                  (atom.alternateLocation == ' ' || atom.alternateLocation == 'A');
+        if (higherOccupancy || preferredTie) current = std::move(atom);
+    }
+    source = std::move(atoms);
+}
+
+} // namespace
 
 void Structure::finalize() {
+    selectAlternateConformers(atoms);
     if (atoms.empty()) {
         boundingRadius = 1.0;
         return;

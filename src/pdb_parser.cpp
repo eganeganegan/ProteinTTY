@@ -2,10 +2,8 @@
 
 #include <charconv>
 #include <fstream>
-#include <map>
 #include <optional>
 #include <stdexcept>
-#include <tuple>
 
 namespace ascii_protein {
 namespace {
@@ -56,30 +54,6 @@ std::string inferElement(const std::string& atomName) {
         }
     }
     return "?";
-}
-
-void selectAlternateConformers(Structure& structure) {
-    using AtomKey = std::tuple<bool, char, int, char, std::string, std::string>;
-    std::map<AtomKey, std::size_t> selected;
-    std::vector<Atom> atoms;
-    atoms.reserve(structure.atoms.size());
-
-    for (auto& atom : structure.atoms) {
-        const AtomKey key{atom.hetero, atom.chain, atom.residueNumber, atom.insertionCode, atom.residueName, atom.name};
-        const auto found = selected.find(key);
-        if (found == selected.end()) {
-            selected.emplace(key, atoms.size());
-            atoms.push_back(std::move(atom));
-            continue;
-        }
-
-        auto& current = atoms[found->second];
-        const bool higherOccupancy = atom.occupancy > current.occupancy;
-        const bool preferredTie = atom.occupancy == current.occupancy && current.alternateLocation != ' ' &&
-                                  (atom.alternateLocation == ' ' || atom.alternateLocation == 'A');
-        if (higherOccupancy || preferredTie) current = std::move(atom);
-    }
-    structure.atoms = std::move(atoms);
 }
 
 } // namespace
@@ -154,7 +128,6 @@ Structure PdbParser::parse(std::istream& input, std::string sourceName) {
     if (structure.atoms.empty()) {
         throw std::runtime_error("no valid ATOM or HETATM records in " + structure.sourceName);
     }
-    selectAlternateConformers(structure);
     structure.finalize();
     return structure;
 }

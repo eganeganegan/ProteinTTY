@@ -11,6 +11,7 @@ namespace ascii_protein {
 struct CliOptions {
     std::optional<std::filesystem::path> input;
     std::optional<std::string> pdbId;
+    bool fetchCif{};
     RenderSettings render;
     Projection projection{Projection::perspective};
     bool spin{};

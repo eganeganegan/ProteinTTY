@@ -1,8 +1,8 @@
 # ProteinTTY
 
-ProteinTTY is an interactive C++20 protein structure viewer for the terminal. It parses PDB files and runs a small
-software 3D pipeline: camera transforms, perspective or orthographic projection, depth-tested atom discs and bonds,
-fake lighting, and ANSI-colored ASCII or Unicode output.
+ProteinTTY is an interactive C++20 molecular structure viewer for the terminal. It parses PDB and mmCIF files and runs
+a small software 3D pipeline: camera transforms, perspective or orthographic projection, depth-tested atom discs and
+bonds, fake lighting, and ANSI-colored ASCII, Unicode, or Braille output.
 
 There are no runtime dependencies beyond a POSIX terminal. Linux and macOS are supported.
 
@@ -44,7 +44,9 @@ Braille backend is in [`assets/ubiquitin-braille.txt`](assets/ubiquitin-braille.
 
 - Fixed-column `ATOM` and `HETATM` parsing, including occupancy-selected alternate conformers, insertion codes,
   B-factor, element, chains, and residues
-- `HELIX` and `SHEET` record parsing and secondary-structure coloring
+- Tag-indexed mmCIF `_atom_site` parsing independent of column order, with quoted and multiline value support
+- PDB `HELIX`/`SHEET` and mmCIF `_struct_conf`/`_struct_sheet_range` secondary-structure coloring
+- Automatic format detection from `.pdb`, `.ent`, `.cif`, `.mmcif`, or file content
 - Centered molecular coordinates, calculated bounds, and automatic fit-to-terminal scaling
 - Perspective and orthographic cameras with yaw, pitch, roll, pan-ready state, and zoom
 - Reusable off-screen framebuffer with per-cell z-buffering
@@ -92,9 +94,11 @@ Select an initial presentation:
 
 ```sh
 ./build/ascii-protein examples/1crn.pdb --mode ca --color residue --projection ortho
+./build/ascii-protein examples/1crn.cif --renderer braille --color secondary
 ./build/ascii-protein examples/1crn.pdb --mode ball-stick --color element --charset unicode
 ./build/ascii-protein examples/1ubq.pdb --renderer braille --mode ca --color secondary
 ./build/ascii-protein --pdb 4HHB --renderer braille
+./build/ascii-protein --pdb 4HHB --format cif --renderer braille
 ./build/ascii-protein examples/1crn.pdb --spin
 ```
 
@@ -134,7 +138,8 @@ When standard input or output is not a TTY, ProteinTTY renders one frame and exi
 ## Architecture
 
 - `geometry.hpp` and `camera.hpp`: vectors, matrices, rotations, and view state
-- `structure.cpp` and `pdb_parser.cpp`: PDB ingestion, molecular hierarchy, centering, bounds, and sequence mapping
+- `pdb_parser.cpp` and `mmcif_parser.cpp`: fixed-column PDB and tag-indexed mmCIF ingestion
+- `structure_loader.cpp` and `structure.cpp`: format dispatch, conformer selection, hierarchy, centering, and bounds
 - `framebuffer.cpp`: Unicode cells, ANSI serialization, and software depth buffer
 - `renderer.cpp`: projection, lines, atom discs, lighting, bonds, palettes, and panels
 - `rcsb.cpp`: validated RCSB downloads and atomic local caching through `curl`
@@ -147,8 +152,8 @@ without coupling trajectory formats to rendering or terminal handling.
 ## Testing
 
 The dependency-free test executable covers vector operations, rotation, fixed-column parsing, malformed records,
-alternate conformer selection, coordinate centering, residue/chain grouping, secondary structure, amino-acid conversion,
-bond inference, RCSB cache behavior, projection, atom inspection, and both rendering backends.
+alternate conformer selection, mmCIF loop/quote handling, coordinate centering, residue/chain grouping, secondary
+structure, amino-acid conversion, bond inference, RCSB cache behavior, projection, atom inspection, and both renderers.
 
 ```sh
 ctest --test-dir build --output-on-failure
@@ -159,6 +164,7 @@ ctest --test-dir build --output-on-failure
 The repository includes three structures downloaded from the RCSB Protein Data Bank:
 
 - [`examples/1crn.pdb`](examples/1crn.pdb): crambin, a compact 46-residue protein
+- [`examples/1crn.cif`](examples/1crn.cif): the same crambin structure in mmCIF format
 - [`examples/1ubq.pdb`](examples/1ubq.pdb): ubiquitin, useful for secondary-structure traces
 - [`examples/1bna.pdb`](examples/1bna.pdb): the Drew-Dickerson DNA dodecamer
 
@@ -166,6 +172,7 @@ Fetch any other four-character entry directly:
 
 ```sh
 ./build/ascii-protein --pdb 1CRN
+./build/ascii-protein --pdb 1CRN --format cif
 ```
 
 Remote loading requires `curl`. Downloads are cached under `$XDG_CACHE_HOME/ascii-protein`, or
@@ -173,16 +180,17 @@ Remote loading requires `curl`. Downloads are cached under `$XDG_CACHE_HOME/asci
 
 ## Limitations
 
-- PDB is supported; mmCIF and trajectory formats are not yet supported.
+- PDB and core macromolecular mmCIF categories are supported; BinaryCIF and trajectory formats are not.
 - Bond inference is intentionally approximate and does not model bond order or exhaustive ligand chemistry.
 - Secondary structure requires PDB annotations; there is no geometry-based DSSP replacement.
 - Terminal input is POSIX-specific; native Windows consoles are not currently supported.
+- Multi-character mmCIF chain IDs are currently represented by their first character.
 - The coordinate-frame interface is present, but no trajectory file reader or playback UI is implemented yet.
 
 ## Next Steps
 
-The strongest additions would be mmCIF input, spatially indexed bond inference for very large structures, geometry-based
-secondary-structure fallback, and an `XYZ` implementation behind the coordinate-frame source interface.
+The strongest additions would be spatially indexed bond inference for very large structures, full string chain IDs,
+geometry-based secondary-structure fallback, and XYZ trajectory playback behind the coordinate-frame source interface.
 
 ## License
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ascii_protein VERSION 0.2.0 LANGUAGES CXX)
+project(ascii_protein VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -8,6 +8,8 @@ option(ASCII_PROTEIN_BUILD_TESTS "Build the test suite" ON)
 add_library(ascii_protein_core
     src/structure.cpp
     src/pdb_parser.cpp
+    src/mmcif_parser.cpp
+    src/structure_loader.cpp
     src/framebuffer.cpp
     src/renderer.cpp
     src/cli.cpp
