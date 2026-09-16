@@ -46,6 +46,7 @@ Braille backend is in [`assets/ubiquitin-braille.txt`](assets/ubiquitin-braille.
   B-factor, element, chains, and residues
 - Tag-indexed mmCIF `_atom_site` parsing independent of column order, with quoted and multiline value support
 - PDB `HELIX`/`SHEET` and mmCIF `_struct_conf`/`_struct_sheet_range` secondary-structure coloring
+- Chain-local C-alpha geometry fallback for unannotated protein helices and sheets, without overriding deposited records
 - Automatic format detection from `.pdb`, `.ent`, `.cif`, `.mmcif`, or file content
 - Centered molecular coordinates, calculated bounds, and automatic fit-to-terminal scaling
 - Perspective and orthographic cameras with yaw, pitch, roll, pan-ready state, and zoom
@@ -227,6 +228,7 @@ ascii-protein examples/1crn.pdb --script examples/presentation.ptty
 - `cli.cpp` and `main.cpp`: option parsing and the application loop
 - `command.cpp`: shared command tokenization, dispatch, queries, scripts, and interactive-console behavior
 - `selection.cpp`: boolean molecular selection parsing and atom-mask evaluation
+- `secondary_assignment.cpp`: C-alpha geometry fallback for unannotated secondary structure
 
 `coordinate_frame_source.hpp` defines the format-independent frame producer contract for future trajectory playback,
 without coupling trajectory formats to rendering or terminal handling.
@@ -236,8 +238,8 @@ without coupling trajectory formats to rendering or terminal handling.
 The dependency-free test executable covers vector operations, rotation, fixed-column parsing, malformed records,
 alternate conformer selection, mmCIF loop/quote handling, coordinate centering, residue/chain grouping, secondary
 structure, amino-acid conversion, spatial bond inference equivalence, RCSB cache behavior, projection, atom inspection,
-full mmCIF chain identifiers, selection expressions, command parsing/dispatch, measurements, completion, structure
-replacement, and both renderers.
+full mmCIF chain identifiers, explicit and geometry-inferred secondary structure, selection expressions, command
+parsing/dispatch, measurements, completion, structure replacement, and both renderers.
 
 ```sh
 ctest --test-dir build --output-on-failure
@@ -266,7 +268,8 @@ Remote loading requires `curl`. Downloads are cached under `$XDG_CACHE_HOME/asci
 
 - PDB and core macromolecular mmCIF categories are supported; BinaryCIF and trajectory formats are not.
 - Bond inference is intentionally approximate and does not model bond order or exhaustive ligand chemistry.
-- Secondary structure requires PDB annotations; there is no geometry-based DSSP replacement.
+- Geometry-inferred secondary structure is an approximate C-alpha trace classification, not a hydrogen-bond-based
+  DSSP replacement; deposited PDB/mmCIF annotations remain authoritative when present.
 - Terminal input is POSIX-specific; native Windows consoles are not currently supported.
 - The coordinate-frame interface is present, but no trajectory file reader or playback UI is implemented yet.
 
@@ -278,8 +281,8 @@ timings vary by compiler, hardware, and terminal dimensions.
 
 ## Next Steps
 
-Follow-on roadmap items are geometry-based secondary-structure fallback, XYZ trajectory playback behind the
-coordinate-frame source interface, native Windows terminal support, and BinaryCIF loading.
+Follow-on roadmap items are XYZ trajectory playback behind the coordinate-frame source interface, native Windows
+terminal support, and BinaryCIF loading.
 
 ## License
 

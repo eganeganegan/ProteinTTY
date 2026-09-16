@@ -1,4 +1,5 @@
 #include "ascii_protein/structure.hpp"
+#include "ascii_protein/secondary_assignment.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -94,6 +95,7 @@ void Structure::finalize() {
             }
         }
     }
+    assignSecondaryStructureFromGeometry(*this);
 }
 
 std::string oneLetterCode(const std::string& residueName) {

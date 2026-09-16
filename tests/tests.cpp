@@ -186,6 +186,72 @@ void testMmcifParser() {
     require(structure.residues[1].secondary == ascii_protein::SecondaryStructure::sheet, "mmCIF sheet range");
 }
 
+ascii_protein::Structure alphaCarbonTrace(const std::vector<ascii_protein::Vec3>& positions,
+                                          const std::vector<int>& residueNumbers = {}) {
+    ascii_protein::Structure structure;
+    for (std::size_t index = 0; index < positions.size(); ++index) {
+        ascii_protein::Atom atom;
+        atom.serial = static_cast<int>(index + 1);
+        atom.name = "CA";
+        atom.element = "C";
+        atom.residueName = "ALA";
+        atom.residueNumber = residueNumbers.empty() ? static_cast<int>(index + 1) : residueNumbers[index];
+        atom.chain = "A";
+        atom.position = positions[index];
+        atom.occupancy = 1.0;
+        structure.atoms.push_back(std::move(atom));
+    }
+    return structure;
+}
+
+void testSecondaryStructureFallback() {
+    std::vector<ascii_protein::Vec3> helixPositions;
+    for (int index = 0; index < 6; ++index) {
+        const double angle = ascii_protein::radians(index * 100.0);
+        helixPositions.push_back({2.3 * std::cos(angle), 2.3 * std::sin(angle), index * 1.5});
+    }
+    auto helix = alphaCarbonTrace(helixPositions);
+    helix.finalize();
+    require(std::all_of(helix.residues.begin(), helix.residues.end(), [](const ascii_protein::Residue& residue) {
+                return residue.secondary == ascii_protein::SecondaryStructure::helix;
+            }),
+            "geometry helix fallback");
+
+    std::vector<ascii_protein::Vec3> sheetPositions;
+    for (int index = 0; index < 6; ++index) {
+        sheetPositions.push_back({index * 3.3, index % 2 == 0 ? -1.0 : 1.0, 0.0});
+    }
+    auto sheet = alphaCarbonTrace(sheetPositions);
+    sheet.finalize();
+    require(std::all_of(sheet.residues.begin(), sheet.residues.end(), [](const ascii_protein::Residue& residue) {
+                return residue.secondary == ascii_protein::SecondaryStructure::sheet;
+            }),
+            "geometry sheet fallback");
+
+    auto explicitSheet = alphaCarbonTrace(helixPositions);
+    explicitSheet.secondaryRanges.push_back({ascii_protein::SecondaryStructure::sheet, "A", 2, "A", 4});
+    explicitSheet.finalize();
+    require(explicitSheet.residues[1].secondary == ascii_protein::SecondaryStructure::sheet &&
+                explicitSheet.residues[3].secondary == ascii_protein::SecondaryStructure::sheet,
+            "explicit secondary structure wins");
+
+    auto gap = alphaCarbonTrace({helixPositions[0], helixPositions[1], helixPositions[2], helixPositions[3]},
+                                {1, 2, 4, 5});
+    gap.finalize();
+    require(std::all_of(gap.residues.begin(), gap.residues.end(), [](const ascii_protein::Residue& residue) {
+                return residue.secondary == ascii_protein::SecondaryStructure::coil;
+            }),
+            "numbering gap breaks geometry run");
+
+    auto nucleic = alphaCarbonTrace(helixPositions);
+    for (auto& atom : nucleic.atoms) atom.residueName = "DA";
+    nucleic.finalize();
+    require(std::all_of(nucleic.residues.begin(), nucleic.residues.end(), [](const ascii_protein::Residue& residue) {
+                return residue.secondary == ascii_protein::SecondaryStructure::coil;
+            }),
+            "non-protein residues ignored by fallback");
+}
+
 void testRcsbCache() {
     require(ascii_protein::normalizePdbId("1CrN") == "1crn", "PDB ID normalization");
     bool rejected = false;
@@ -433,6 +499,7 @@ int main() {
         testParserAndModel();
         testAlternateConformers();
         testMmcifParser();
+        testSecondaryStructureFallback();
         testRcsbCache();
         testSpatialBondInference();
         testCommands();
