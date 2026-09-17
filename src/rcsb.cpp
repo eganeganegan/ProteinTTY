@@ -4,28 +4,47 @@
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
-#include <spawn.h>
 #include <stdexcept>
 #include <string>
+#if defined(_WIN32)
+#include <process.h>
+#else
+#include <spawn.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 extern char** environ;
+#endif
 
 namespace ascii_protein {
 namespace {
 
 std::filesystem::path defaultCacheDirectory() {
+#if defined(_WIN32)
+    if (const char* localAppData = std::getenv("LOCALAPPDATA")) {
+        if (*localAppData != '\0') return std::filesystem::path(localAppData) / "ascii-protein";
+    }
+#else
     if (const char* xdgCache = std::getenv("XDG_CACHE_HOME")) {
         if (*xdgCache != '\0') return std::filesystem::path(xdgCache) / "ascii-protein";
     }
     if (const char* home = std::getenv("HOME")) {
         if (*home != '\0') return std::filesystem::path(home) / ".cache" / "ascii-protein";
     }
+#endif
     return std::filesystem::temp_directory_path() / "ascii-protein-cache";
 }
 
 void download(const std::string& url, const std::filesystem::path& destination) {
+#if defined(_WIN32)
+    const std::wstring output = destination.wstring();
+    const std::wstring requestUrl(url.begin(), url.end());
+    const std::array<const wchar_t*, 8> arguments{
+        L"curl.exe", L"-fL", L"--silent", L"--show-error", L"--output", output.c_str(), requestUrl.c_str(), nullptr};
+    const intptr_t status = _wspawnvp(_P_WAIT, L"curl.exe", arguments.data());
+    if (status == -1) throw std::runtime_error("could not start curl to download " + url);
+    if (status != 0) throw std::runtime_error("RCSB download failed for " + url);
+#else
     std::string output = destination.string();
     std::string requestUrl = url;
     std::array<char*, 8> arguments{
@@ -39,6 +58,15 @@ void download(const std::string& url, const std::filesystem::path& destination) 
     if (waitpid(process, &status, 0) < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
         throw std::runtime_error("RCSB download failed for " + url);
     }
+#endif
+}
+
+int processId() {
+#if defined(_WIN32)
+    return _getpid();
+#else
+    return getpid();
+#endif
 }
 
 } // namespace
@@ -62,7 +90,7 @@ std::filesystem::path fetchFormat(const std::string& pdbId, std::string_view ext
     const auto cached = directory / (normalized + std::string(extension));
     if (std::filesystem::is_regular_file(cached) && std::filesystem::file_size(cached) > 0) return cached;
 
-    const auto temporary = directory / (normalized + std::string(extension) + ".part-" + std::to_string(getpid()));
+    const auto temporary = directory / (normalized + std::string(extension) + ".part-" + std::to_string(processId()));
     const std::string url = "https://files.rcsb.org/download/" + normalized + std::string(extension);
     try {
         download(url, temporary);

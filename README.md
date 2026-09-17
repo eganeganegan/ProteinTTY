@@ -4,7 +4,8 @@ ProteinTTY is an interactive C++20 molecular structure viewer for the terminal. 
 a small software 3D pipeline: camera transforms, perspective or orthographic projection, depth-tested atom discs and
 bonds, fake lighting, and ANSI-colored ASCII, Unicode, or Braille output.
 
-There are no runtime dependencies beyond a POSIX terminal. Linux and macOS are supported.
+Local structure viewing has no runtime dependencies beyond a terminal. Linux, macOS, and Windows 10 or newer are
+supported; remote RCSB loading additionally requires `curl`, which current Windows releases include.
 
 ## Demo
 
@@ -74,6 +75,9 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
+
+The same commands work in PowerShell with Visual Studio 2022's C++ workload. On Windows, run the application in
+Windows Terminal, PowerShell, or another console with virtual-terminal support.
 
 Install for the current user without elevated permissions:
 
@@ -251,7 +255,7 @@ ascii-protein examples/1crn.pdb --script examples/presentation.ptty
 - `framebuffer.cpp`: Unicode cells, ANSI serialization, and software depth buffer
 - `renderer.cpp`: projection, lines, atom discs, lighting, spatially indexed bonds, palettes, and panels
 - `rcsb.cpp`: validated RCSB downloads and atomic local caching through `curl`
-- `terminal.cpp`: POSIX raw mode, alternate-screen lifecycle, resizing, input polling, and arrow-key decoding
+- `terminal.cpp`: POSIX and Win32 console modes, alternate-screen lifecycle, resizing, input polling, and key decoding
 - `cli.cpp` and `main.cpp`: option parsing and the application loop
 - `command.cpp`: shared command tokenization, dispatch, queries, scripts, and interactive-console behavior
 - `selection.cpp`: boolean molecular selection parsing and atom-mask evaluation
@@ -289,8 +293,8 @@ Fetch any other four-character entry directly:
 ./build/ascii-protein --pdb 1CRN --format cif
 ```
 
-Remote loading requires `curl`. Downloads are cached under `$XDG_CACHE_HOME/ascii-protein`, or
-`$HOME/.cache/ascii-protein` when `XDG_CACHE_HOME` is unset.
+Remote loading requires `curl`. On Unix, downloads are cached under `$XDG_CACHE_HOME/ascii-protein`, or
+`$HOME/.cache/ascii-protein` when `XDG_CACHE_HOME` is unset. Windows uses `%LOCALAPPDATA%\ascii-protein`.
 
 ## Limitations
 
@@ -300,7 +304,6 @@ Remote loading requires `curl`. Downloads are cached under `$XDG_CACHE_HOME/asci
 - Bond inference is intentionally approximate and does not model bond order or exhaustive ligand chemistry.
 - Geometry-inferred secondary structure is an approximate C-alpha trace classification, not a hydrogen-bond-based
   DSSP replacement; deposited PDB/mmCIF annotations remain authoritative when present.
-- Terminal input is POSIX-specific; native Windows consoles are not currently supported.
 
 ## Performance
 
@@ -310,7 +313,7 @@ timings vary by compiler, hardware, and terminal dimensions.
 
 ## Next Steps
 
-Follow-on roadmap items are native Windows terminal support and BinaryCIF loading.
+The next roadmap item is BinaryCIF loading.
 
 ## License
 

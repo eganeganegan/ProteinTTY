@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ascii_protein VERSION 0.8.0 LANGUAGES CXX)
+project(ascii_protein VERSION 0.9.0 LANGUAGES CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -29,6 +29,8 @@ target_compile_features(ascii_protein_core PUBLIC cxx_std_20)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(ascii_protein_core PRIVATE -Wall -Wextra -Wpedantic)
+elseif(MSVC)
+    target_compile_options(ascii_protein_core PRIVATE /W4 /permissive-)
 endif()
 
 add_executable(ascii-protein src/main.cpp)
@@ -45,6 +47,8 @@ if(ASCII_PROTEIN_BUILD_TESTS)
     target_link_libraries(ascii_protein_tests PRIVATE ascii_protein_core)
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         target_compile_options(ascii_protein_tests PRIVATE -Wall -Wextra -Wpedantic)
+    elseif(MSVC)
+        target_compile_options(ascii_protein_tests PRIVATE /W4 /permissive-)
     endif()
     add_test(NAME ascii_protein_tests COMMAND ascii_protein_tests)
 endif()
