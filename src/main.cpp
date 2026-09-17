@@ -4,6 +4,7 @@
 #include "ascii_protein/rcsb.hpp"
 #include "ascii_protein/structure_loader.hpp"
 #include "ascii_protein/terminal.hpp"
+#include "ascii_protein/trajectory.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -145,7 +146,8 @@ ascii_protein::CommandResult runInitialCommands(const ascii_protein::CliOptions&
 void applyKey(const ascii_protein::KeyEvent& event, ascii_protein::Camera& camera,
               ascii_protein::RenderSettings& settings, std::size_t residueCount, bool& running, bool& autorotate,
               const ascii_protein::Framebuffer& framebuffer, int& snapshotNumber,
-              std::optional<std::size_t> centerAtom) {
+              std::optional<std::size_t> centerAtom, ascii_protein::Structure& structure,
+              ascii_protein::TrajectoryState& trajectory) {
     using ascii_protein::ColorMode;
     using ascii_protein::Key;
     using ascii_protein::Projection;
@@ -200,6 +202,21 @@ void applyKey(const ascii_protein::KeyEvent& event, ascii_protein::Camera& camer
         }
         break;
     case ' ': autorotate = !autorotate; break;
+    case '`':
+        if (trajectory.source) trajectory.playing = !trajectory.playing;
+        break;
+    case ',':
+        if (trajectory.source) {
+            trajectory.playing = false;
+            ascii_protein::stepTrajectory(structure, trajectory, -1);
+        }
+        break;
+    case '.':
+        if (trajectory.source) {
+            trajectory.playing = false;
+            ascii_protein::stepTrajectory(structure, trajectory, 1);
+        }
+        break;
     case 'x': case 'X': saveSnapshot(framebuffer, snapshotNumber); break;
     default: break;
     }
@@ -229,6 +246,10 @@ int main(int argc, char** argv) {
         camera.projection = options.projection;
         bool running = true;
         bool autorotate = options.spin;
+        ascii_protein::TrajectoryState trajectory;
+        trajectory.frameDelayMs = options.frameDelayMs;
+        trajectory.loop = options.trajectoryLoop;
+        if (options.trajectory) ascii_protein::loadTrajectory(*options.trajectory, structure, trajectory);
         int currentWidth = options.width;
         int currentHeight = options.height;
         ascii_protein::CommandState commandState{
@@ -238,7 +259,8 @@ int main(int argc, char** argv) {
                 std::ofstream output(path);
                 if (!output) throw std::runtime_error("cannot save snapshot: " + path.string());
                 output << renderer->render(camera, options.render, currentWidth, currentHeight).toPlainText() << '\n';
-            }};
+            },
+            &trajectory};
         const auto initialCommands = runInitialCommands(options, commandState);
         if (!running) {
             for (const auto& line : initialCommands.output) std::cout << line << '\n';
@@ -246,6 +268,7 @@ int main(int argc, char** argv) {
         }
 
         if (options.snapshot || !ascii_protein::Terminal::interactive()) {
+            options.render.trajectoryInfo = ascii_protein::trajectoryStatus(trajectory);
             for (const auto& line : initialCommands.output) std::cerr << line << '\n';
             const auto& frame = renderer->render(camera, options.render, options.width, options.height);
             std::cout << frame.toString(options.render.color && !options.snapshot, options.render.backgroundColor) << '\n';
@@ -259,24 +282,39 @@ int main(int argc, char** argv) {
         ConsoleState console;
         console.message = joinOutput(initialCommands);
         auto previous = std::chrono::steady_clock::now();
+        double trajectoryElapsedMs = 0.0;
         while (running && !interrupted) {
             const auto now = std::chrono::steady_clock::now();
             const double elapsed = std::chrono::duration<double>(now - previous).count();
             previous = now;
             if (autorotate) camera.rotate(elapsed * 24.0, 0.0);
+            if (trajectory.playing && trajectory.source) {
+                trajectoryElapsedMs += elapsed * 1000.0;
+                if (trajectoryElapsedMs >= trajectory.frameDelayMs) {
+                    trajectoryElapsedMs = 0.0;
+                    if (!ascii_protein::stepTrajectory(structure, trajectory)) {
+                        trajectory.playing = false;
+                        console.message = "Trajectory complete";
+                    }
+                }
+            } else {
+                trajectoryElapsedMs = 0.0;
+            }
             const auto dimensions = terminal.size();
             currentWidth = dimensions.width;
             currentHeight = dimensions.height;
             options.render.commandActive = console.active;
             options.render.commandLine = console.input;
             options.render.commandMessage = console.message;
+            options.render.trajectoryInfo = ascii_protein::trajectoryStatus(trajectory);
             const auto& frame = renderer->render(camera, options.render, dimensions.width, dimensions.height);
             if (dimensions.width < 20 || dimensions.height < 8) {
                 terminal.present("Terminal too small (minimum 20x8). Resize or press q.");
             } else {
                 terminal.present(frame.toString(options.render.color, options.render.backgroundColor));
             }
-            const auto event = terminal.readKey(autorotate ? 33 : 100);
+            const int timeout = trajectory.playing ? std::min(trajectory.frameDelayMs, 100) : autorotate ? 33 : 100;
+            const auto event = terminal.readKey(timeout);
             if (options.spin && event.key != ascii_protein::Key::none) break;
             if (console.active) {
                 handleConsoleKey(event, console, commandState);
@@ -291,7 +329,7 @@ int main(int argc, char** argv) {
             }
             const auto centerAtom = renderer->nearestAtom(camera, options.render, dimensions.width, dimensions.height);
             applyKey(event, camera, options.render, structure.residues.size(), running, autorotate, frame,
-                     snapshotNumber, centerAtom);
+                     snapshotNumber, centerAtom, structure, trajectory);
         }
         return 0;
     } catch (const std::exception& error) {

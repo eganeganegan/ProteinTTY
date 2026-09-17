@@ -12,6 +12,8 @@
 
 namespace ascii_protein {
 
+struct TrajectoryState;
+
 struct CommandState {
     Camera& camera;
     RenderSettings& render;
@@ -20,6 +22,7 @@ struct CommandState {
     bool& running;
     std::function<void()> structureChanged;
     std::function<void(const std::filesystem::path&)> saveFrame;
+    TrajectoryState* trajectory{};
 };
 
 struct CommandResult {

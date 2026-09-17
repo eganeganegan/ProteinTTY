@@ -33,6 +33,28 @@ void selectAlternateConformers(std::vector<Atom>& source) {
     source = std::move(atoms);
 }
 
+void updateCoordinateBounds(Structure& structure) {
+    structure.originalCentroid = {};
+    for (const auto& atom : structure.atoms) structure.originalCentroid += atom.position;
+    structure.originalCentroid = structure.originalCentroid / static_cast<double>(structure.atoms.size());
+    structure.boundsMin = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
+                           std::numeric_limits<double>::max()};
+    structure.boundsMax = {std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest(),
+                           std::numeric_limits<double>::lowest()};
+    structure.boundingRadius = 0.0;
+    for (auto& atom : structure.atoms) {
+        atom.position = atom.position - structure.originalCentroid;
+        structure.boundsMin.x = std::min(structure.boundsMin.x, atom.position.x);
+        structure.boundsMin.y = std::min(structure.boundsMin.y, atom.position.y);
+        structure.boundsMin.z = std::min(structure.boundsMin.z, atom.position.z);
+        structure.boundsMax.x = std::max(structure.boundsMax.x, atom.position.x);
+        structure.boundsMax.y = std::max(structure.boundsMax.y, atom.position.y);
+        structure.boundsMax.z = std::max(structure.boundsMax.z, atom.position.z);
+        structure.boundingRadius = std::max(structure.boundingRadius, length(atom.position));
+    }
+    structure.boundingRadius = std::max(1.0, structure.boundingRadius);
+}
+
 } // namespace
 
 void Structure::finalize() {
@@ -42,28 +64,7 @@ void Structure::finalize() {
         return;
     }
 
-    originalCentroid = {};
-    for (const auto& atom : atoms) {
-        originalCentroid += atom.position;
-    }
-    originalCentroid = originalCentroid / static_cast<double>(atoms.size());
-
-    boundsMin = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
-                 std::numeric_limits<double>::max()};
-    boundsMax = {std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest(),
-                 std::numeric_limits<double>::lowest()};
-    boundingRadius = 0.0;
-    for (auto& atom : atoms) {
-        atom.position = atom.position - originalCentroid;
-        boundsMin.x = std::min(boundsMin.x, atom.position.x);
-        boundsMin.y = std::min(boundsMin.y, atom.position.y);
-        boundsMin.z = std::min(boundsMin.z, atom.position.z);
-        boundsMax.x = std::max(boundsMax.x, atom.position.x);
-        boundsMax.y = std::max(boundsMax.y, atom.position.y);
-        boundsMax.z = std::max(boundsMax.z, atom.position.z);
-        boundingRadius = std::max(boundingRadius, length(atom.position));
-    }
-    boundingRadius = std::max(1.0, boundingRadius);
+    updateCoordinateBounds(*this);
 
     residues.clear();
     chains.clear();
@@ -96,6 +97,12 @@ void Structure::finalize() {
         }
     }
     assignSecondaryStructureFromGeometry(*this);
+}
+
+void Structure::updatePositions(const std::vector<Vec3>& positions) {
+    if (positions.size() != atoms.size()) throw std::runtime_error("coordinate count does not match structure");
+    for (std::size_t index = 0; index < atoms.size(); ++index) atoms[index].position = positions[index];
+    if (!atoms.empty()) updateCoordinateBounds(*this);
 }
 
 std::string oneLetterCode(const std::string& residueName) {

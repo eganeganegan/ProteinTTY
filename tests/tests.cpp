@@ -8,6 +8,8 @@
 #include "ascii_protein/selection.hpp"
 #include "ascii_protein/structure.hpp"
 #include "ascii_protein/structure_loader.hpp"
+#include "ascii_protein/trajectory.hpp"
+#include "ascii_protein/xyz_trajectory_source.hpp"
 
 #include <cmath>
 #include <filesystem>
@@ -476,11 +478,18 @@ void testCommandCliOptions() {
     char scriptOption[] = "--script";
     char script[] = "demo.ptty";
     char secondCommand[] = "count atoms";
-    char* arguments[] = {
-        executable, input, commandOption, firstCommand, scriptOption, script, commandOption, secondCommand};
-    const auto options = ascii_protein::parseCli(8, arguments);
+    char trajectoryOption[] = "--trajectory";
+    char trajectory[] = "motion.xyz";
+    char delayOption[] = "--frame-delay";
+    char delay[] = "40";
+    char loop[] = "--loop";
+    char* arguments[] = {executable, input, commandOption, firstCommand, scriptOption, script, commandOption,
+                         secondCommand, trajectoryOption, trajectory, delayOption, delay, loop};
+    const auto options = ascii_protein::parseCli(13, arguments);
     require(options.commands.size() == 2 && options.commands[1] == "count atoms", "repeatable command options");
     require(options.scripts.size() == 1 && options.scripts[0] == "demo.ptty", "script option");
+        require(options.trajectory == "motion.xyz" && options.frameDelayMs == 40 && options.trajectoryLoop,
+            "trajectory CLI options");
 
     char* missingValue[] = {executable, input, commandOption};
     try {
@@ -489,6 +498,123 @@ void testCommandCliOptions() {
     } catch (const std::runtime_error& error) {
         require(std::string(error.what()).find("missing value") != std::string::npos, "missing command value error");
     }
+    char invalidDelay[] = "9";
+    char* invalidDelayArguments[] = {executable, input, delayOption, invalidDelay};
+    try {
+        static_cast<void>(ascii_protein::parseCli(4, invalidDelayArguments));
+        require(false, "invalid frame delay rejected");
+    } catch (const std::runtime_error& error) {
+        require(std::string(error.what()).find("invalid frame delay") != std::string::npos,
+                "invalid frame delay error");
+    }
+}
+
+void testXyzTrajectory() {
+    const auto path = std::filesystem::temp_directory_path() / "protein-tty-trajectory.xyz";
+    {
+    std::ofstream output(path);
+    output << "2\nframe zero\nC 0 0 0\nO 2 0 0\n\n"
+          "2\nframe one\nC 0 0 0\nO 4 0 0\n";
+    }
+    ascii_protein::XyzTrajectorySource source(path);
+    require(source.atomCount() == 2 && source.frameCount() == 2, "XYZ trajectory dimensions");
+    require(source.frameLabel(1) == "frame one" && near(source.frame(1)[1].x, 4.0), "XYZ frame data");
+
+    ascii_protein::Structure structure;
+    for (int index = 0; index < 2; ++index) {
+    ascii_protein::Atom atom;
+    atom.serial = index + 1;
+    atom.name = index == 0 ? "C" : "O";
+    atom.element = atom.name;
+    atom.residueName = "GLY";
+    atom.residueNumber = 1;
+    atom.chain = "A";
+    atom.occupancy = 1.0;
+    structure.atoms.push_back(std::move(atom));
+    }
+    structure.finalize();
+    ascii_protein::TrajectoryState trajectory;
+    ascii_protein::loadTrajectory(path, structure, trajectory);
+    require(trajectory.playing && trajectory.frameIndex == 0 && near(structure.atoms[1].position.x, 1.0),
+        "trajectory loads first centered frame");
+    require(ascii_protein::stepTrajectory(structure, trajectory) && trajectory.frameIndex == 1 &&
+        near(structure.atoms[1].position.x, 2.0),
+        "trajectory advances frame");
+    require(!ascii_protein::stepTrajectory(structure, trajectory), "trajectory stops at final frame");
+    trajectory.loop = true;
+    require(ascii_protein::stepTrajectory(structure, trajectory) && trajectory.frameIndex == 0,
+        "trajectory loops to first frame");
+    require(ascii_protein::stepTrajectory(structure, trajectory, -1) && trajectory.frameIndex == 1,
+        "trajectory reverse step loops");
+    ascii_protein::stopTrajectory(structure, trajectory);
+    require(!trajectory.playing && trajectory.frameIndex == 0 && near(structure.atoms[1].position.x, 1.0),
+        "trajectory stop resets first frame");
+    require(ascii_protein::trajectoryStatus(trajectory).find("Frame 1/2") != std::string::npos,
+        "trajectory status");
+
+    ascii_protein::Camera camera;
+    ascii_protein::RenderSettings render;
+    bool autorotate = false;
+    bool running = true;
+    ascii_protein::CommandState commandState{
+        camera, render, structure, autorotate, running, {}, {}, &trajectory};
+    const auto commands = ascii_protein::executeCommands(
+        "pause; step 1; set trajectory-loop on; step 1; set frame-delay 25; resume", commandState);
+    require(commands.success && trajectory.playing && trajectory.loop && trajectory.frameDelayMs == 25 &&
+                trajectory.frameIndex == 0,
+            "trajectory command controls");
+    const auto stopped = ascii_protein::executeCommands("stop", commandState);
+    require(stopped.success && !trajectory.playing && trajectory.frameIndex == 0, "trajectory stop command");
+
+    ascii_protein::Structure wrongSize;
+    wrongSize.atoms.push_back(structure.atoms.front());
+    wrongSize.finalize();
+    try {
+        ascii_protein::TrajectoryState wrongTrajectory;
+        ascii_protein::loadTrajectory(path, wrongSize, wrongTrajectory);
+        require(false, "trajectory atom mismatch rejected");
+    } catch (const std::runtime_error& error) {
+        require(std::string(error.what()).find("trajectory has 2 atoms; structure has 1") != std::string::npos,
+                "trajectory atom mismatch error");
+    }
+
+    const auto malformed = std::filesystem::temp_directory_path() / "protein-tty-malformed.xyz";
+    {
+    std::ofstream output(malformed);
+    output << "2\nbad\nC 0 0 0\nO nope 0 0\n";
+    }
+    try {
+    static_cast<void>(ascii_protein::XyzTrajectorySource(malformed));
+    require(false, "malformed XYZ rejected");
+    } catch (const std::runtime_error& error) {
+    require(std::string(error.what()).find("frame 1, atom 2") != std::string::npos,
+        "positioned XYZ error");
+    }
+    const auto changedLabel = std::filesystem::temp_directory_path() / "protein-tty-label-change.xyz";
+    {
+        std::ofstream output(changedLabel);
+        output << "1\nfirst\nC 0 0 0\n1\nsecond\nN 0 0 0\n";
+    }
+    try {
+        static_cast<void>(ascii_protein::XyzTrajectorySource(changedLabel));
+        require(false, "changed XYZ label rejected");
+    } catch (const std::runtime_error& error) {
+        require(std::string(error.what()).find("atom label changed") != std::string::npos,
+                "changed XYZ label error");
+    }
+    auto mismatchedElements = structure;
+    mismatchedElements.atoms[1].element = "N";
+    try {
+        ascii_protein::TrajectoryState mismatchedTrajectory;
+        ascii_protein::loadTrajectory(path, mismatchedElements, mismatchedTrajectory);
+        require(false, "trajectory topology label mismatch rejected");
+    } catch (const std::runtime_error& error) {
+        require(std::string(error.what()).find("topology atom") != std::string::npos,
+                "trajectory topology label mismatch error");
+    }
+    std::filesystem::remove(path);
+    std::filesystem::remove(malformed);
+    std::filesystem::remove(changedLabel);
 }
 
 } // namespace
@@ -505,6 +631,7 @@ int main() {
         testCommands();
         testSelections();
         testCommandCliOptions();
+        testXyzTrajectory();
         std::cout << "All tests passed\n";
         return 0;
     } catch (const std::exception& error) {

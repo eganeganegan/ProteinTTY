@@ -2,6 +2,7 @@
 #include "ascii_protein/selection.hpp"
 #include "ascii_protein/rcsb.hpp"
 #include "ascii_protein/structure_loader.hpp"
+#include "ascii_protein/trajectory.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -148,6 +149,12 @@ void resetStructureState(CommandState state) {
     state.render.inspectedAtom.reset();
     state.render.selectedResidue.reset();
     state.camera.reset();
+        if (state.trajectory) {
+            state.trajectory->source.reset();
+            state.trajectory->path.clear();
+            state.trajectory->frameIndex = 0;
+            state.trajectory->playing = false;
+        }
     if (state.structureChanged) state.structureChanged();
 }
 
@@ -287,11 +294,57 @@ void execute(const Command& command, CommandState state, CommandResult& result) 
         else if (setting == "background") {
             const int foreground = colorCode(command, 2);
             state.render.backgroundColor = foreground == 0 ? 0 : foreground + 10;
+        } else if (setting == "frame-delay") {
+            if (!state.trajectory) fail(command, 1, "trajectory controls are unavailable");
+            const double delay = numericValue(command, 2);
+            if (delay < 10.0 || delay > 10000.0 || std::floor(delay) != delay) {
+                fail(command, 2, "frame delay must be an integer from 10 to 10000 ms");
+            }
+            state.trajectory->frameDelayMs = static_cast<int>(delay);
+        } else if (setting == "trajectory-loop") {
+            if (!state.trajectory) fail(command, 1, "trajectory controls are unavailable");
+            state.trajectory->loop = toggleValue(command, 2, state.trajectory->loop);
         }
         else fail(command, 1, "unknown setting: " + command[1].text);
     } else if (verb == "spin") {
         requireArguments(command, 2, "spin on|off|toggle");
         state.autorotate = toggleValue(command, 1, state.autorotate);
+        } else if (verb == "play") {
+            if (!state.trajectory) fail(command, 0, "trajectory controls are unavailable");
+            if (command.size() > 2) fail(command, 2, "usage: play [trajectory.xyz]");
+            if (command.size() == 2) loadTrajectory(command[1].text, state.structure, *state.trajectory);
+            else if (!state.trajectory->source) fail(command, 0, "no trajectory loaded");
+            state.trajectory->playing = state.trajectory->source->frameCount() > 1;
+            result.output.push_back(trajectoryStatus(*state.trajectory));
+        } else if (verb == "pause") {
+            requireArguments(command, 1, "pause");
+            if (!state.trajectory || !state.trajectory->source) fail(command, 0, "no trajectory loaded");
+            state.trajectory->playing = false;
+            result.output.push_back(trajectoryStatus(*state.trajectory));
+        } else if (verb == "resume") {
+            requireArguments(command, 1, "resume");
+            if (!state.trajectory || !state.trajectory->source) fail(command, 0, "no trajectory loaded");
+            state.trajectory->playing = state.trajectory->source->frameCount() > 1;
+            result.output.push_back(trajectoryStatus(*state.trajectory));
+        } else if (verb == "step") {
+            if (command.size() > 2) fail(command, 2, "usage: step [offset]");
+            if (!state.trajectory || !state.trajectory->source) fail(command, 0, "no trajectory loaded");
+            int offset = 1;
+            if (command.size() == 2) {
+                const double value = numericValue(command, 1);
+                if (std::floor(value) != value || value < -100000 || value > 100000) {
+                    fail(command, 1, "step offset must be an integer");
+                }
+                offset = static_cast<int>(value);
+            }
+            state.trajectory->playing = false;
+            if (!stepTrajectory(state.structure, *state.trajectory, offset)) fail(command, 0, "trajectory boundary reached");
+            result.output.push_back(trajectoryStatus(*state.trajectory));
+        } else if (verb == "stop") {
+            requireArguments(command, 1, "stop");
+            if (!state.trajectory || !state.trajectory->source) fail(command, 0, "no trajectory loaded");
+            stopTrajectory(state.structure, *state.trajectory);
+            result.output.push_back(trajectoryStatus(*state.trajectory));
     } else if (verb == "zoom") {
         if (command.size() == 2) {
             try {
@@ -462,7 +515,9 @@ std::string commandHelp(std::string_view command) {
     if (topic == "hide") return "hide <selection>";
     if (topic == "select") return "select <name> <expression>";
     if (topic == "delete") return "delete <selection|all>";
-    if (topic == "set") return "set projection|renderer|charset|info|sequence|background <value>";
+    if (topic == "set") {
+        return "set projection|renderer|charset|info|sequence|background|frame-delay|trajectory-loop <value>";
+    }
     if (topic == "color") return "color <mode> | color <selection> <color>";
     if (topic == "rotate") return "rotate yaw|pitch|roll <degrees>";
     if (topic == "count") return "count atoms|residues|chains|<selection>";
@@ -476,13 +531,16 @@ std::string commandHelp(std::string_view command) {
     if (topic == "distance") return "distance <atom-serial|selection> <atom-serial|selection>";
     if (topic == "angle") return "angle <atom1> <atom2> <atom3>";
     if (topic == "dihedral") return "dihedral <atom1> <atom2> <atom3> <atom4>";
+    if (topic == "play") return "play [trajectory.xyz]";
+    if (topic == "pause" || topic == "resume" || topic == "stop") return topic;
+    if (topic == "step") return "step [signed-offset]";
     if (topic == "selection" || topic == "selections") {
         return "Selections: all, none, chain ID, resi N[-M], resn NAME[+NAME], name ATOM, element SYMBOL, "
                "serial N, hetero, solvent, named selections, and/or/not, and parentheses";
     }
     if (!topic.empty()) return "No help for command: " + std::string(command);
-    return "Commands: show, hide, select, delete, color, set, spin, zoom, center, inspect, rotate, reset, count, "
-           "list, sequence, distance, angle, dihedral, info, load, fetch, save, help, quit";
+    return "Commands: show, hide, select, delete, color, set, spin, play, pause, resume, step, stop, zoom, center, "
+           "inspect, rotate, reset, count, list, sequence, distance, angle, dihedral, info, load, fetch, save, help, quit";
 }
 
 std::vector<std::string> commandCompletions(std::string_view input, CommandState state) {
@@ -509,16 +567,16 @@ std::vector<std::string> commandCompletions(std::string_view input, CommandState
         }
     };
     if (position == 0) {
-        add({"show", "hide", "select", "delete", "color", "set", "spin", "zoom", "center", "inspect",
+        add({"show", "hide", "select", "delete", "color", "set", "spin", "play", "pause", "resume", "step", "stop", "zoom", "center", "inspect",
              "rotate", "reset", "count", "list", "sequence", "distance", "angle", "dihedral", "info",
              "load", "fetch", "save", "help", "quit"});
     } else if (verb == "set" && position == 1) {
-        add({"projection", "renderer", "charset", "info", "sequence", "background"});
+        add({"projection", "renderer", "charset", "info", "sequence", "background", "frame-delay", "trajectory-loop"});
     } else if (verb == "set" && words.size() >= 3) {
         if (words[1] == "projection") add({"perspective", "orthographic"});
         else if (words[1] == "renderer") add({"cells", "braille"});
         else if (words[1] == "charset") add({"ascii", "unicode"});
-        else if (words[1] == "info" || words[1] == "sequence") add({"on", "off", "toggle"});
+        else if (words[1] == "info" || words[1] == "sequence" || words[1] == "trajectory-loop") add({"on", "off", "toggle"});
         else if (words[1] == "background") add({"default", "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"});
     } else if (verb == "rotate" && position == 1) {
         add({"yaw", "pitch", "roll"});
@@ -537,7 +595,8 @@ std::vector<std::string> commandCompletions(std::string_view input, CommandState
         addSelections();
     } else if (verb == "help") {
         add({"show", "hide", "select", "delete", "color", "set", "zoom", "center", "inspect", "rotate",
-             "count", "load", "fetch", "save", "distance", "angle", "dihedral"});
+             "count", "load", "fetch", "save", "distance", "angle", "dihedral", "play", "pause", "resume",
+             "step", "stop"});
     } else if (verb == "fetch" && position == 2) {
         add({"format"});
     } else if (verb == "fetch" && position == 3) {

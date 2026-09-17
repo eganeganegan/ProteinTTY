@@ -326,6 +326,7 @@ void Renderer::drawPanels(const Camera& camera, const RenderSettings& settings, 
         std::ostringstream zoom;
         zoom << "Zoom: " << std::fixed << std::setprecision(1) << camera.zoom << 'x';
         framebuffer_.text(x, y++, zoom.str(), 37);
+        if (!settings.trajectoryInfo.empty()) framebuffer_.text(x, y++, settings.trajectoryInfo, 93);
         ++y;
         if (settings.inspectedAtom && *settings.inspectedAtom < structure_.atoms.size()) {
             const auto& atom = structure_.atoms[*settings.inspectedAtom];
@@ -383,7 +384,7 @@ void Renderer::drawHelp() {
         "PROTEIN TTY CONTROLS", "", "Arrows / WASD   rotate", "Z / E           roll", "+ / -           zoom",
         "R               reset camera", "P               projection", "1..5            render mode",
         "C               color mode", "[ / ]           select residue", "O               inspect center atom",
-        "I               info panel", "S               sequence", ":               command console",
+        "I / S           info / sequence", "` / , / .       play / prev / next", ":               command console",
         "Space           autorotate", "X               save snapshot", "H / Escape      close help", "Q               quit"};
     int y = top + 2;
     for (const auto* line : lines) {

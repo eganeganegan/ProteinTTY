@@ -61,6 +61,7 @@ struct Structure {
     double boundingRadius{1.0};
 
     void finalize();
+    void updatePositions(const std::vector<Vec3>& positions);
 };
 
 std::string oneLetterCode(const std::string& residueName);

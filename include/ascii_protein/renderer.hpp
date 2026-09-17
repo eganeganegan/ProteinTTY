@@ -36,6 +36,7 @@ struct RenderSettings {
     bool commandActive{};
     std::string commandLine;
     std::string commandMessage;
+    std::string trajectoryInfo;
 };
 
 struct ProjectedPoint {

@@ -62,6 +62,7 @@ Braille backend is in [`assets/ubiquitin-braille.txt`](assets/ubiquitin-braille.
 - Repeatable `--command` automation and reusable `.ptty` command scripts
 - Validated `--pdb ID` downloads with an XDG-compatible local RCSB cache
 - Autorotation, clean screensaver mode, resize handling, and plain-text snapshots
+- Multi-frame XYZ trajectory playback with pause, stepping, speed, and loop controls
 - RAII terminal restoration after normal exits and caught exceptions; signal-aware shutdown for `SIGINT` and `SIGTERM`
 
 ## Build
@@ -109,6 +110,7 @@ Select an initial presentation:
 ./build/ascii-protein examples/1crn.pdb --spin
 ./build/ascii-protein examples/1crn.pdb --script examples/presentation.ptty
 ./build/ascii-protein examples/1crn.pdb --command "show cartoon; color secondary; set renderer braille"
+./build/ascii-protein topology.pdb --trajectory motion.xyz --frame-delay 50 --loop
 ```
 
 Create deterministic output for files, scripts, or CI:
@@ -138,6 +140,8 @@ When standard input or output is not a TTY, ProteinTTY renders one frame and exi
 | `O` | Toggle inspection of the atom nearest the viewport center |
 | `I` | Toggle information panel |
 | `Shift+S` | Toggle local sequence panel |
+| Backtick | Play/pause trajectory |
+| `,` / `.` | Previous/next trajectory frame and pause |
 | `:` | Open command console |
 | `Space` | Toggle autorotation |
 | `X` | Save `snapshot-NNN.txt` |
@@ -164,7 +168,14 @@ set renderer cells|braille
 set charset ascii|unicode
 set info|sequence on|off|toggle
 set background default|black|red|green|yellow|blue|magenta|cyan|white
+set frame-delay 50
+set trajectory-loop on|off|toggle
 spin on|off|toggle
+play [trajectory.xyz]
+pause
+resume
+step [signed-offset]
+stop
 zoom 1.5
 zoom <selection>
 center <selection>
@@ -208,6 +219,22 @@ distance 1 2
 Measurement operands are atom serials or named selections containing exactly one atom. Loading or fetching a new
 structure clears selections and atom-specific colors, resets the camera, and safely rebuilds inferred bonds.
 
+### XYZ Trajectories
+
+XYZ playback uses a PDB or mmCIF file for molecular topology and a multi-frame XYZ file for coordinates. Every XYZ
+frame must contain the same atom labels in the same order, and those labels must match the topology elements.
+ProteinTTY recenters each frame while preserving atom identities, residue metadata, selections, colors, and inferred
+bond indices.
+
+```sh
+ascii-protein topology.pdb --trajectory motion.xyz --frame-delay 50 --loop
+ascii-protein topology.pdb --command "play motion.xyz; set trajectory-loop on"
+```
+
+`play` loads or resumes a trajectory, `pause` freezes the current frame, `step` accepts positive or negative offsets,
+and `stop` returns to frame 1. A snapshot renders the current frame; for example,
+`--command "pause; step 10" --snapshot` renders frame 11.
+
 The same dispatcher powers automation. Query output is written separately from snapshot output, and script lines
 beginning with `#` are comments:
 
@@ -229,8 +256,9 @@ ascii-protein examples/1crn.pdb --script examples/presentation.ptty
 - `command.cpp`: shared command tokenization, dispatch, queries, scripts, and interactive-console behavior
 - `selection.cpp`: boolean molecular selection parsing and atom-mask evaluation
 - `secondary_assignment.cpp`: C-alpha geometry fallback for unannotated secondary structure
+- `xyz_trajectory_source.cpp` and `trajectory.cpp`: strict XYZ frame loading and playback state
 
-`coordinate_frame_source.hpp` defines the format-independent frame producer contract for future trajectory playback,
+`coordinate_frame_source.hpp` defines the format-independent random-access frame contract used by XYZ playback,
 without coupling trajectory formats to rendering or terminal handling.
 
 ## Testing
@@ -238,8 +266,8 @@ without coupling trajectory formats to rendering or terminal handling.
 The dependency-free test executable covers vector operations, rotation, fixed-column parsing, malformed records,
 alternate conformer selection, mmCIF loop/quote handling, coordinate centering, residue/chain grouping, secondary
 structure, amino-acid conversion, spatial bond inference equivalence, RCSB cache behavior, projection, atom inspection,
-full mmCIF chain identifiers, explicit and geometry-inferred secondary structure, selection expressions, command
-parsing/dispatch, measurements, completion, structure replacement, and both renderers.
+full mmCIF chain identifiers, explicit and geometry-inferred secondary structure, XYZ parsing and playback, selection
+expressions, command parsing/dispatch, measurements, completion, structure replacement, and both renderers.
 
 ```sh
 ctest --test-dir build --output-on-failure
@@ -266,12 +294,13 @@ Remote loading requires `curl`. Downloads are cached under `$XDG_CACHE_HOME/asci
 
 ## Limitations
 
-- PDB and core macromolecular mmCIF categories are supported; BinaryCIF and trajectory formats are not.
+- PDB and core macromolecular mmCIF categories are supported; BinaryCIF is not.
+- XYZ trajectories must match topology atom count and order. Frames are loaded into memory to support reverse and
+  random stepping, so very large trajectories should be reduced before viewing.
 - Bond inference is intentionally approximate and does not model bond order or exhaustive ligand chemistry.
 - Geometry-inferred secondary structure is an approximate C-alpha trace classification, not a hydrogen-bond-based
   DSSP replacement; deposited PDB/mmCIF annotations remain authoritative when present.
 - Terminal input is POSIX-specific; native Windows consoles are not currently supported.
-- The coordinate-frame interface is present, but no trajectory file reader or playback UI is implemented yet.
 
 ## Performance
 
@@ -281,8 +310,7 @@ timings vary by compiler, hardware, and terminal dimensions.
 
 ## Next Steps
 
-Follow-on roadmap items are XYZ trajectory playback behind the coordinate-frame source interface, native Windows
-terminal support, and BinaryCIF loading.
+Follow-on roadmap items are native Windows terminal support and BinaryCIF loading.
 
 ## License
 
