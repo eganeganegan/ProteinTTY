@@ -1,5 +1,6 @@
 #include "ascii_protein/structure_loader.hpp"
 
+#include "ascii_protein/binarycif_parser.hpp"
 #include "ascii_protein/mmcif_parser.hpp"
 #include "ascii_protein/pdb_parser.hpp"
 
@@ -15,11 +16,16 @@ Structure loadStructure(const std::filesystem::path& path) {
     std::string extension = path.extension().string();
     std::transform(extension.begin(), extension.end(), extension.begin(),
                    [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+    if (extension == ".bcif") return BinaryCifParser::parseFile(path);
     if (extension == ".cif" || extension == ".mmcif") return MmcifParser::parseFile(path);
     if (extension == ".pdb" || extension == ".ent") return PdbParser::parseFile(path);
 
-    std::ifstream input(path);
+    std::ifstream input(path, std::ios::binary);
     if (!input) throw std::runtime_error("cannot open structure file: " + path.string());
+    const int firstByte = input.peek();
+    if (firstByte >= 0 && static_cast<unsigned char>(firstByte) >= 0x80) {
+        return BinaryCifParser::parse(input, path.filename().string());
+    }
     std::string firstToken;
     input >> firstToken;
     input.clear();

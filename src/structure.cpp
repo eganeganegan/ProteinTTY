@@ -90,7 +90,10 @@ void Structure::finalize() {
     for (auto& residue : residues) {
         for (const auto& range : secondaryRanges) {
             if (residue.chain == range.startChain && residue.chain == range.endChain &&
-                residue.number >= range.startResidue && residue.number <= range.endResidue) {
+                std::tie(residue.number, residue.insertionCode) >=
+                    std::tie(range.startResidue, range.startInsertionCode) &&
+                std::tie(residue.number, residue.insertionCode) <=
+                    std::tie(range.endResidue, range.endInsertionCode)) {
                 residue.secondary = range.type;
                 break;
             }

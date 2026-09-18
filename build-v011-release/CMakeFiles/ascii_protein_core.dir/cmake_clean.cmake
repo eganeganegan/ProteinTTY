@@ -1,0 +1,41 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/ascii_protein_core.dir/src/binarycif_parser.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/binarycif_parser.cpp.o.d"
+  "CMakeFiles/ascii_protein_core.dir/src/cli.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/cli.cpp.o.d"
+  "CMakeFiles/ascii_protein_core.dir/src/command.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/command.cpp.o.d"
+  "CMakeFiles/ascii_protein_core.dir/src/framebuffer.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/framebuffer.cpp.o.d"
+  "CMakeFiles/ascii_protein_core.dir/src/mmcif_parser.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/mmcif_parser.cpp.o.d"
+  "CMakeFiles/ascii_protein_core.dir/src/pdb_parser.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/pdb_parser.cpp.o.d"
+  "CMakeFiles/ascii_protein_core.dir/src/rcsb.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/rcsb.cpp.o.d"
+  "CMakeFiles/ascii_protein_core.dir/src/renderer.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/renderer.cpp.o.d"
+  "CMakeFiles/ascii_protein_core.dir/src/secondary_assignment.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/secondary_assignment.cpp.o.d"
+  "CMakeFiles/ascii_protein_core.dir/src/selection.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/selection.cpp.o.d"
+  "CMakeFiles/ascii_protein_core.dir/src/structure.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/structure.cpp.o.d"
+  "CMakeFiles/ascii_protein_core.dir/src/structure_loader.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/structure_loader.cpp.o.d"
+  "CMakeFiles/ascii_protein_core.dir/src/terminal.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/terminal.cpp.o.d"
+  "CMakeFiles/ascii_protein_core.dir/src/terminal_input.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/terminal_input.cpp.o.d"
+  "CMakeFiles/ascii_protein_core.dir/src/trajectory.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/trajectory.cpp.o.d"
+  "CMakeFiles/ascii_protein_core.dir/src/xyz_trajectory_source.cpp.o"
+  "CMakeFiles/ascii_protein_core.dir/src/xyz_trajectory_source.cpp.o.d"
+  "libascii_protein_core.a"
+  "libascii_protein_core.pdb"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/ascii_protein_core.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

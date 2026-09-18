@@ -9,10 +9,12 @@
 
 namespace ascii_protein {
 
+enum class RemoteFormat { pdb, cif, bcif };
+
 struct CliOptions {
     std::optional<std::filesystem::path> input;
     std::optional<std::string> pdbId;
-    bool fetchCif{};
+    RemoteFormat remoteFormat{RemoteFormat::pdb};
     RenderSettings render;
     Projection projection{Projection::perspective};
     bool spin{};

@@ -46,6 +46,8 @@ struct SecondaryRange {
     int startResidue{};
     std::string endChain;
     int endResidue{};
+    char startInsertionCode{' '};
+    char endInsertionCode{' '};
 };
 
 struct Structure {

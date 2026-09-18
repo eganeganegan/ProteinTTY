@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux GCC
+            os: ubuntu-latest
+            cc: gcc
+            cxx: g++
+          - name: Linux Clang
+            os: ubuntu-latest
+            cc: clang
+            cxx: clang++
+          - name: macOS AppleClang
+            os: macos-latest
+            cc: clang
+            cxx: clang++
+          - name: Windows MSVC
+            os: windows-latest
+            cc: ""
+            cxx: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Unix
+        if: runner.os != 'Windows'
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Configure Windows
+        if: runner.os == 'Windows'
+        run: cmake -S . -B build -A x64
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build --build-config Release --output-on-failure
+
+      - name: Snapshot smoke test Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          ./build/ascii-protein examples/1crn.pdb --snapshot --no-color --width 110 --height 32 > snapshot-a.txt
+          ./build/ascii-protein examples/1crn.pdb --snapshot --no-color --width 110 --height 32 > snapshot-b.txt
+          test -s snapshot-a.txt
+          grep -q 'Atoms: 327' snapshot-a.txt
+          cmp snapshot-a.txt snapshot-b.txt
+
+      - name: Snapshot smoke test Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./build/Release/ascii-protein.exe examples/1crn.pdb --snapshot --no-color --width 110 --height 32 > snapshot-a.txt
+          ./build/Release/ascii-protein.exe examples/1crn.pdb --snapshot --no-color --width 110 --height 32 > snapshot-b.txt
+          if (-not (Select-String -Quiet -Pattern 'Atoms: 327' snapshot-a.txt)) { throw 'snapshot atom count missing' }
+          if ((Get-FileHash snapshot-a.txt).Hash -ne (Get-FileHash snapshot-b.txt).Hash) { throw 'snapshot is not deterministic' }

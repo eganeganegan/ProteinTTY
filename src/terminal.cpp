@@ -1,4 +1,5 @@
 #include "ascii_protein/terminal.hpp"
+#include "ascii_protein/terminal_input.hpp"
 
 #if defined(_WIN32)
 
@@ -6,7 +7,6 @@
 #include <windows.h>
 
 #include <algorithm>
-#include <deque>
 #include <stdexcept>
 #include <string>
 
@@ -25,12 +25,6 @@ void writeConsole(HANDLE output, std::string_view text) {
     }
 }
 
-std::string utf8(WCHAR character) {
-    char bytes[4]{};
-    const int count = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, &character, 1, bytes, sizeof(bytes), nullptr, nullptr);
-    return count > 0 ? std::string(bytes, static_cast<std::size_t>(count)) : std::string{};
-}
-
 } // namespace
 
 struct Terminal::State {
@@ -40,7 +34,8 @@ struct Terminal::State {
     DWORD originalOutputMode{};
     UINT originalInputCodePage{};
     UINT originalOutputCodePage{};
-    mutable std::deque<KeyEvent> pending;
+    mutable TerminalInputDecoder decoder;
+    mutable WCHAR highSurrogate{};
 };
 
 bool Terminal::interactive() {
@@ -102,41 +97,43 @@ TerminalSize Terminal::size() const {
 
 KeyEvent Terminal::readKey(int timeoutMilliseconds) const {
     if (!state_) return {};
-    if (!state_->pending.empty()) {
-        const auto event = state_->pending.front();
-        state_->pending.pop_front();
-        return event;
-    }
+    if (const auto event = state_->decoder.next()) return *event;
     const DWORD timeout = timeoutMilliseconds < 0 ? INFINITE : static_cast<DWORD>(timeoutMilliseconds);
     while (WaitForSingleObject(state_->input, timeout) == WAIT_OBJECT_0) {
         INPUT_RECORD record{};
         DWORD count = 0;
         if (!ReadConsoleInputW(state_->input, &record, 1, &count) || count == 0) return {};
+        if (record.EventType == WINDOW_BUFFER_SIZE_EVENT) return {Key::resize};
         if (record.EventType != KEY_EVENT || !record.Event.KeyEvent.bKeyDown) continue;
         const auto& key = record.Event.KeyEvent;
         KeyEvent event;
-        std::string encoded;
         if (key.wVirtualKeyCode == VK_LEFT) event = {Key::left};
         else if (key.wVirtualKeyCode == VK_RIGHT) event = {Key::right};
         else if (key.wVirtualKeyCode == VK_UP) event = {Key::up};
         else if (key.wVirtualKeyCode == VK_DOWN) event = {Key::down};
         else if (key.wVirtualKeyCode == VK_ESCAPE) event = {Key::escape};
-        else if (key.uChar.UnicodeChar > 0) {
-            encoded = utf8(key.uChar.UnicodeChar);
-            if (encoded.empty()) continue;
+        else if (key.uChar.UnicodeChar >= 0xd800 && key.uChar.UnicodeChar <= 0xdbff) {
+            state_->highSurrogate = key.uChar.UnicodeChar;
+            continue;
+        } else if (key.uChar.UnicodeChar >= 0xdc00 && key.uChar.UnicodeChar <= 0xdfff && state_->highSurrogate) {
+            const char32_t codepoint = 0x10000 +
+                ((static_cast<char32_t>(state_->highSurrogate) - 0xd800) << 10) +
+                (static_cast<char32_t>(key.uChar.UnicodeChar) - 0xdc00);
+            state_->highSurrogate = 0;
+            state_->decoder.appendCodepoint(codepoint, key.wRepeatCount);
+            return state_->decoder.next().value_or(KeyEvent{});
+        } else if (key.uChar.UnicodeChar >= 0xdc00 && key.uChar.UnicodeChar <= 0xdfff) {
+            state_->highSurrogate = 0;
+            continue;
+        } else if (key.uChar.UnicodeChar > 0) {
+            state_->highSurrogate = 0;
+            state_->decoder.appendCodepoint(key.uChar.UnicodeChar, key.wRepeatCount);
+            return state_->decoder.next().value_or(KeyEvent{});
         } else {
             continue;
         }
-        for (WORD repeat = 0; repeat < key.wRepeatCount; ++repeat) {
-            if (encoded.empty()) {
-                state_->pending.push_back(event);
-            } else {
-                for (const char byte : encoded) state_->pending.push_back({Key::character, byte});
-            }
-        }
-        const auto decoded = state_->pending.front();
-        state_->pending.pop_front();
-        return decoded;
+        state_->decoder.appendEvent(event, key.wRepeatCount);
+        return state_->decoder.next().value_or(KeyEvent{});
     }
     return {};
 }
@@ -164,7 +161,7 @@ namespace ascii_protein {
 
 struct Terminal::State {
     termios original{};
-    std::string pending;
+    mutable TerminalInputDecoder decoder;
 };
 
 bool Terminal::interactive() { return isatty(STDIN_FILENO) && isatty(STDOUT_FILENO); }
@@ -209,30 +206,27 @@ TerminalSize Terminal::size() const {
 }
 
 KeyEvent Terminal::readKey(int timeoutMilliseconds) const {
-    if (state_->pending.empty()) {
-        pollfd descriptor{STDIN_FILENO, POLLIN, 0};
-        const int result = poll(&descriptor, 1, timeoutMilliseconds);
-        if (result <= 0 || !(descriptor.revents & POLLIN)) return {};
-        char bytes[64]{};
-        const auto count = ::read(STDIN_FILENO, bytes, sizeof(bytes));
-        if (count <= 0) return {};
-        state_->pending.append(bytes, static_cast<std::size_t>(count));
+    if (!state_) return {};
+    if (const auto event = state_->decoder.next()) return *event;
+    pollfd descriptor{STDIN_FILENO, POLLIN, 0};
+    const int result = poll(&descriptor, 1, timeoutMilliseconds);
+    if (result <= 0 || !(descriptor.revents & POLLIN)) {
+        return state_->decoder.next(true).value_or(KeyEvent{});
     }
-    if (state_->pending.front() == '\x1b') {
-        if (state_->pending.size() >= 3 && state_->pending[1] == '[') {
-            const char direction = state_->pending[2];
-            state_->pending.erase(0, 3);
-            if (direction == 'A') return {Key::up};
-            if (direction == 'B') return {Key::down};
-            if (direction == 'C') return {Key::right};
-            if (direction == 'D') return {Key::left};
+    char bytes[64]{};
+    const auto count = ::read(STDIN_FILENO, bytes, sizeof(bytes));
+    if (count <= 0) return {};
+    state_->decoder.appendBytes(std::string_view(bytes, static_cast<std::size_t>(count)));
+    if (const auto event = state_->decoder.next()) return *event;
+
+    descriptor.revents = 0;
+    if (poll(&descriptor, 1, 5) > 0 && (descriptor.revents & POLLIN)) {
+        const auto continuation = ::read(STDIN_FILENO, bytes, sizeof(bytes));
+        if (continuation > 0) {
+            state_->decoder.appendBytes(std::string_view(bytes, static_cast<std::size_t>(continuation)));
         }
-        state_->pending.erase(0, 1);
-        return {Key::escape};
     }
-    const char character = state_->pending.front();
-    state_->pending.erase(0, 1);
-    return {Key::character, character};
+    return state_->decoder.next(true).value_or(KeyEvent{});
 }
 
 void Terminal::present(std::string_view frame) const {

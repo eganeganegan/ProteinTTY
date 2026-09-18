@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x86_64
+          - os: macos-latest
+            platform: macos
+          - os: windows-latest
+            platform: windows-x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Unix
+        if: runner.os != 'Windows'
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Configure Windows
+        if: runner.os == 'Windows'
+        run: cmake -S . -B build -A x64
+
+      - name: Build and test
+        run: |
+          cmake --build build --config Release --parallel
+          ctest --test-dir build --build-config Release --output-on-failure
+
+      - name: Verify tag version Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: test "$(./build/ascii-protein --version)" = "ascii-protein ${GITHUB_REF_NAME#v}"
+
+      - name: Verify tag version Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $expected = "ascii-protein $($env:GITHUB_REF_NAME.TrimStart('v'))"
+          if ((./build/Release/ascii-protein.exe --version) -ne $expected) { throw "tag does not match project version" }
+
+      - name: Package
+        run: >-
+          cmake
+          -DBUILD_DIR=${{ github.workspace }}/build
+          -DSOURCE_DIR=${{ github.workspace }}
+          -DOUTPUT_DIR=${{ github.workspace }}/build/release
+          -DVERSION=${{ github.ref_name }}
+          -DPLATFORM=${{ matrix.platform }}
+          -P ${{ github.workspace }}/scripts/package_release.cmake
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.platform }}
+          path: build/release/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          path: release
+          merge-multiple: true
+
+      - name: Consolidate checksums
+        working-directory: release
+        run: sha256sum *.tar.gz *.zip > SHA256SUMS
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            release/*.tar.gz
+            release/*.zip
+            release/*.sha256
+            release/SHA256SUMS

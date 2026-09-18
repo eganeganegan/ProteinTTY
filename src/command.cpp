@@ -426,20 +426,23 @@ void execute(const Command& command, CommandState state, CommandResult& result) 
         if (resultSequence.empty() && !chain.empty()) fail(command, 1, "chain not found: " + chain);
         result.output.push_back(resultSequence);
     } else if (verb == "load") {
-        requireArguments(command, 2, "load <structure.pdb|structure.cif>");
+        requireArguments(command, 2, "load <structure.pdb|structure.cif|structure.bcif>");
         state.structure = loadStructure(command[1].text);
         resetStructureState(state);
         result.output.push_back("Loaded " + state.structure.sourceName);
     } else if (verb == "fetch") {
-        if (command.size() != 2 && command.size() != 4) fail(command, command.size() - 1, "usage: fetch <PDB-ID> [format pdb|cif]");
-        bool cif = false;
+        if (command.size() != 2 && command.size() != 4) fail(command, command.size() - 1, "usage: fetch <PDB-ID> [format pdb|cif|bcif]");
+        std::string format = "pdb";
         if (command.size() == 4) {
-            if (lower(command[2].text) != "format") fail(command, 2, "expected format pdb|cif");
-            const std::string format = lower(command[3].text);
-            if (format != "pdb" && format != "cif") fail(command, 3, "expected format pdb|cif");
-            cif = format == "cif";
+            if (lower(command[2].text) != "format") fail(command, 2, "expected format pdb|cif|bcif");
+            format = lower(command[3].text);
+            if (format != "pdb" && format != "cif" && format != "bcif") {
+                fail(command, 3, "expected format pdb|cif|bcif");
+            }
         }
-        const auto path = cif ? fetchMmcif(command[1].text) : fetchPdb(command[1].text);
+        const auto path = format == "bcif" ? fetchBinaryCif(command[1].text)
+                            : format == "cif" ? fetchMmcif(command[1].text)
+                                               : fetchPdb(command[1].text);
         state.structure = loadStructure(path);
         resetStructureState(state);
         result.output.push_back("Fetched " + normalizePdbId(command[1].text));
@@ -525,8 +528,8 @@ std::string commandHelp(std::string_view command) {
     if (topic == "center") return "center <selection>";
     if (topic == "zoom") return "zoom <factor|selection>";
     if (topic == "inspect") return "inspect <single-atom-selection>";
-    if (topic == "load") return "load <structure.pdb|structure.cif>";
-    if (topic == "fetch") return "fetch <PDB-ID> [format pdb|cif]";
+    if (topic == "load") return "load <structure.pdb|structure.cif|structure.bcif>";
+    if (topic == "fetch") return "fetch <PDB-ID> [format pdb|cif|bcif]";
     if (topic == "save") return "save <snapshot.txt>";
     if (topic == "distance") return "distance <atom-serial|selection> <atom-serial|selection>";
     if (topic == "angle") return "angle <atom1> <atom2> <atom3>";
@@ -600,7 +603,7 @@ std::vector<std::string> commandCompletions(std::string_view input, CommandState
     } else if (verb == "fetch" && position == 2) {
         add({"format"});
     } else if (verb == "fetch" && position == 3) {
-        add({"pdb", "cif"});
+        add({"pdb", "cif", "bcif"});
     } else {
         addSelections();
     }

@@ -66,8 +66,10 @@ CliOptions parseCli(int argc, char** argv) {
         else if (argument == "--pdb") options.pdbId = requireValue(index, argc, argv, argument);
         else if (argument == "--format") {
             const auto value = requireValue(index, argc, argv, argument);
-            if (value != "pdb" && value != "cif") throw std::runtime_error("unknown structure format: " + value);
-            options.fetchCif = value == "cif";
+            if (value == "pdb") options.remoteFormat = RemoteFormat::pdb;
+            else if (value == "cif") options.remoteFormat = RemoteFormat::cif;
+            else if (value == "bcif") options.remoteFormat = RemoteFormat::bcif;
+            else throw std::runtime_error("unknown structure format: " + value);
         }
         else if (argument == "--mode") options.render.mode = parseMode(requireValue(index, argc, argv, argument));
         else if (argument == "--color") options.render.colorMode = parseColor(requireValue(index, argc, argv, argument));
@@ -95,7 +97,9 @@ CliOptions parseCli(int argc, char** argv) {
         else options.input = argument;
     }
     if (options.input && options.pdbId) throw std::runtime_error("use either a PDB file or --pdb, not both");
-    if (options.fetchCif && !options.pdbId) throw std::runtime_error("--format is only used with --pdb");
+    if (options.remoteFormat != RemoteFormat::pdb && !options.pdbId) {
+        throw std::runtime_error("--format is only used with --pdb");
+    }
     if (!options.help && !options.version && !options.input && !options.pdbId) {
         throw std::runtime_error("missing PDB file or --pdb ID (try --help)");
     }
@@ -105,7 +109,7 @@ CliOptions parseCli(int argc, char** argv) {
 std::string helpText() {
     return
         "ProteinTTY - interactive terminal protein viewer\n\n"
-        "Usage: ascii-protein <structure.pdb|structure.cif> [options]\n\n"
+        "Usage: ascii-protein <structure.pdb|structure.cif|structure.bcif> [options]\n\n"
         "Options:\n"
         "  --command TEXT   Execute a viewer command (repeatable)\n"
         "  --script FILE    Execute commands from a .ptty script\n"
@@ -113,7 +117,7 @@ std::string helpText() {
             "  --frame-delay MS   Trajectory frame delay, 10..10000 (default 100)\n"
             "  --loop             Loop trajectory playback\n"
         "  --pdb ID         Download and cache a structure from RCSB\n"
-        "  --format pdb|cif Remote structure format (default pdb)\n"
+        "  --format pdb|cif|bcif  Remote structure format (default pdb)\n"
         "  --mode atoms|backbone|ca|ball-stick|residue\n"
         "  --color element|chain|residue|bfactor|secondary\n"
         "  --charset ascii|unicode\n"

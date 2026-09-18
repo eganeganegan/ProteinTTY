@@ -9,7 +9,7 @@ struct TerminalSize {
     int height{32};
 };
 
-enum class Key { none, character, left, right, up, down, escape };
+enum class Key { none, character, left, right, up, down, escape, resize };
 
 struct KeyEvent {
     Key key{Key::none};

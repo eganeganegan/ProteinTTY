@@ -1,8 +1,8 @@
 # ProteinTTY
 
-ProteinTTY is an interactive C++20 molecular structure viewer for the terminal. It parses PDB and mmCIF files and runs
-a small software 3D pipeline: camera transforms, perspective or orthographic projection, depth-tested atom discs and
-bonds, fake lighting, and ANSI-colored ASCII, Unicode, or Braille output.
+ProteinTTY is an interactive C++20 molecular structure viewer for the terminal. It parses PDB, mmCIF, and BinaryCIF
+files and runs a small software 3D pipeline: camera transforms, perspective or orthographic projection, depth-tested
+atom discs and bonds, fake lighting, and ANSI-colored ASCII, Unicode, or Braille output.
 
 Local structure viewing has no runtime dependencies beyond a terminal. Linux, macOS, and Windows 10 or newer are
 supported; remote RCSB loading additionally requires `curl`, which current Windows releases include.
@@ -46,6 +46,7 @@ Braille backend is in [`assets/ubiquitin-braille.txt`](assets/ubiquitin-braille.
 - Fixed-column `ATOM` and `HETATM` parsing, including occupancy-selected alternate conformers, insertion codes,
   B-factor, element, chains, and residues
 - Tag-indexed mmCIF `_atom_site` parsing independent of column order, with quoted and multiline value support
+- MessagePack-based BinaryCIF loading with standard numeric, string, packing, delta, run-length, and mask encodings
 - PDB `HELIX`/`SHEET` and mmCIF `_struct_conf`/`_struct_sheet_range` secondary-structure coloring
 - Chain-local C-alpha geometry fallback for unannotated protein helices and sheets, without overriding deposited records
 - Automatic format detection from `.pdb`, `.ent`, `.cif`, `.mmcif`, or file content
@@ -77,7 +78,7 @@ ctest --test-dir build --output-on-failure
 ```
 
 The same commands work in PowerShell with Visual Studio 2022's C++ workload. On Windows, run the application in
-Windows Terminal, PowerShell, or another console with virtual-terminal support.
+Windows Terminal, PowerShell, or another console with virtual-terminal support (Windows 10 build 14931 or newer).
 
 Install for the current user without elevated permissions:
 
@@ -91,8 +92,24 @@ Ensure `$HOME/.local/bin` is on `PATH` (it already is on many systems):
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
+After installation, run `ascii-protein` from any directory; the project folder is not required:
+
+```sh
+ascii-protein /path/to/structure.cif
+ascii-protein --pdb 1CRN --format bcif
+```
+
 Running `cmake --install build` without `--prefix` uses CMake's default `/usr/local` prefix. On systems where
 `/usr/local` is owned by `root`, that command requires administrator access; the user-local command above avoids it.
+
+Create a platform archive and SHA-256 file locally after a Release build:
+
+```sh
+cmake --build build --target release-package
+```
+
+Tagged releases run the same packaging process for Linux, macOS, and Windows and publish a consolidated
+`SHA256SUMS` file.
 
 ## Usage
 
@@ -107,10 +124,12 @@ Select an initial presentation:
 ```sh
 ./build/ascii-protein examples/1crn.pdb --mode ca --color residue --projection ortho
 ./build/ascii-protein examples/1crn.cif --renderer braille --color secondary
+./build/ascii-protein structure.bcif --renderer braille
 ./build/ascii-protein examples/1crn.pdb --mode ball-stick --color element --charset unicode
 ./build/ascii-protein examples/1ubq.pdb --renderer braille --mode ca --color secondary
 ./build/ascii-protein --pdb 4HHB --renderer braille
 ./build/ascii-protein --pdb 4HHB --format cif --renderer braille
+./build/ascii-protein --pdb 4HHB --format bcif --renderer braille
 ./build/ascii-protein examples/1crn.pdb --spin
 ./build/ascii-protein examples/1crn.pdb --script examples/presentation.ptty
 ./build/ascii-protein examples/1crn.pdb --command "show cartoon; color secondary; set renderer braille"
@@ -193,8 +212,8 @@ sequence [chain]
 distance <atom-serial|single-atom-selection> <atom-serial|single-atom-selection>
 angle <atom1> <atom2> <atom3>
 dihedral <atom1> <atom2> <atom3> <atom4>
-load <structure.pdb|structure.cif>
-fetch <PDB-ID> [format pdb|cif]
+load <structure.pdb|structure.cif|structure.bcif>
+fetch <PDB-ID> [format pdb|cif|bcif]
 save <snapshot.txt>
 info
 help [command]
@@ -250,12 +269,13 @@ ascii-protein examples/1crn.pdb --script examples/presentation.ptty
 ## Architecture
 
 - `geometry.hpp` and `camera.hpp`: vectors, matrices, rotations, and view state
-- `pdb_parser.cpp` and `mmcif_parser.cpp`: fixed-column PDB and tag-indexed mmCIF ingestion
+- `pdb_parser.cpp`, `mmcif_parser.cpp`, and `binarycif_parser.cpp`: PDB, text mmCIF, and encoded BinaryCIF ingestion
 - `structure_loader.cpp` and `structure.cpp`: format dispatch, conformer selection, hierarchy, centering, and bounds
 - `framebuffer.cpp`: Unicode cells, ANSI serialization, and software depth buffer
 - `renderer.cpp`: projection, lines, atom discs, lighting, spatially indexed bonds, palettes, and panels
 - `rcsb.cpp`: validated RCSB downloads and atomic local caching through `curl`
-- `terminal.cpp`: POSIX and Win32 console modes, alternate-screen lifecycle, resizing, input polling, and key decoding
+- `terminal.cpp`: POSIX and Win32 console modes, alternate-screen lifecycle, resizing, and input polling
+- `terminal_input.cpp`: platform-neutral key buffering, ANSI sequence decoding, repeats, and UTF-8 input
 - `cli.cpp` and `main.cpp`: option parsing and the application loop
 - `command.cpp`: shared command tokenization, dispatch, queries, scripts, and interactive-console behavior
 - `selection.cpp`: boolean molecular selection parsing and atom-mask evaluation
@@ -268,14 +288,17 @@ without coupling trajectory formats to rendering or terminal handling.
 ## Testing
 
 The dependency-free test executable covers vector operations, rotation, fixed-column parsing, malformed records,
-alternate conformer selection, mmCIF loop/quote handling, coordinate centering, residue/chain grouping, secondary
-structure, amino-acid conversion, spatial bond inference equivalence, RCSB cache behavior, projection, atom inspection,
-full mmCIF chain identifiers, explicit and geometry-inferred secondary structure, XYZ parsing and playback, selection
-expressions, command parsing/dispatch, measurements, completion, structure replacement, and both renderers.
+alternate conformer selection, mmCIF and BinaryCIF decoding, bounded malformed BinaryCIF input, terminal key decoding,
+coordinate centering, residue/chain grouping, secondary structure and insertion codes, amino-acid conversion, spatial
+bond inference equivalence, RCSB cache behavior, projection, atom inspection, XYZ playback, selections, commands,
+measurements, completion, structure replacement, and both renderers.
 
 ```sh
 ctest --test-dir build --output-on-failure
 ```
+
+GitHub Actions runs the Release build, tests, and deterministic snapshot smoke test with GCC, Clang, AppleClang,
+and MSVC.
 
 ## Example Data
 
@@ -298,7 +321,7 @@ Remote loading requires `curl`. On Unix, downloads are cached under `$XDG_CACHE_
 
 ## Limitations
 
-- PDB and core macromolecular mmCIF categories are supported; BinaryCIF is not.
+- PDB and core macromolecular mmCIF/BinaryCIF categories are supported.
 - XYZ trajectories must match topology atom count and order. Frames are loaded into memory to support reverse and
   random stepping, so very large trajectories should be reduced before viewing.
 - Bond inference is intentionally approximate and does not model bond order or exhaustive ligand chemistry.
@@ -311,9 +334,9 @@ Bond candidates are found through a 3D spatial hash rather than an all-pairs sca
 rendering the 772 KB `4HHB.cif` hemoglobin structure in ball-and-stick mode takes approximately 0.10 seconds. Exact
 timings vary by compiler, hardware, and terminal dimensions.
 
-## Next Steps
+## Roadmap
 
-The next roadmap item is BinaryCIF loading.
+See [`ROADMAP.md`](ROADMAP.md) for the planned reliability, trajectory, molecular-semantics, and map/session work.
 
 ## License
 

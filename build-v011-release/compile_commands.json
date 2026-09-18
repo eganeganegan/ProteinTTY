@@ -1,0 +1,110 @@
+[
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/structure.cpp.o -c /Users/anthonyegan/ascii-viewer/src/structure.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/structure.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/structure.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/pdb_parser.cpp.o -c /Users/anthonyegan/ascii-viewer/src/pdb_parser.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/pdb_parser.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/pdb_parser.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/mmcif_parser.cpp.o -c /Users/anthonyegan/ascii-viewer/src/mmcif_parser.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/mmcif_parser.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/mmcif_parser.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/binarycif_parser.cpp.o -c /Users/anthonyegan/ascii-viewer/src/binarycif_parser.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/binarycif_parser.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/binarycif_parser.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/structure_loader.cpp.o -c /Users/anthonyegan/ascii-viewer/src/structure_loader.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/structure_loader.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/structure_loader.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/framebuffer.cpp.o -c /Users/anthonyegan/ascii-viewer/src/framebuffer.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/framebuffer.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/framebuffer.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/renderer.cpp.o -c /Users/anthonyegan/ascii-viewer/src/renderer.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/renderer.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/renderer.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/cli.cpp.o -c /Users/anthonyegan/ascii-viewer/src/cli.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/cli.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/cli.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/terminal.cpp.o -c /Users/anthonyegan/ascii-viewer/src/terminal.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/terminal.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/terminal.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/terminal_input.cpp.o -c /Users/anthonyegan/ascii-viewer/src/terminal_input.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/terminal_input.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/terminal_input.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/rcsb.cpp.o -c /Users/anthonyegan/ascii-viewer/src/rcsb.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/rcsb.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/rcsb.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/command.cpp.o -c /Users/anthonyegan/ascii-viewer/src/command.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/command.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/command.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/selection.cpp.o -c /Users/anthonyegan/ascii-viewer/src/selection.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/selection.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/selection.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/secondary_assignment.cpp.o -c /Users/anthonyegan/ascii-viewer/src/secondary_assignment.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/secondary_assignment.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/secondary_assignment.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/trajectory.cpp.o -c /Users/anthonyegan/ascii-viewer/src/trajectory.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/trajectory.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/trajectory.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_core.dir/src/xyz_trajectory_source.cpp.o -c /Users/anthonyegan/ascii-viewer/src/xyz_trajectory_source.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/xyz_trajectory_source.cpp",
+  "output": "CMakeFiles/ascii_protein_core.dir/src/xyz_trajectory_source.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++ -DASCII_PROTEIN_VERSION=\\\"0.11.0\\\" -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -o CMakeFiles/ascii-protein.dir/src/main.cpp.o -c /Users/anthonyegan/ascii-viewer/src/main.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/src/main.cpp",
+  "output": "CMakeFiles/ascii-protein.dir/src/main.cpp.o"
+},
+{
+  "directory": "/Users/anthonyegan/ascii-viewer/build-v011-release",
+  "command": "/usr/bin/c++  -I/Users/anthonyegan/ascii-viewer/include -O3 -DNDEBUG -std=gnu++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/ascii_protein_tests.dir/tests/tests.cpp.o -c /Users/anthonyegan/ascii-viewer/tests/tests.cpp",
+  "file": "/Users/anthonyegan/ascii-viewer/tests/tests.cpp",
+  "output": "CMakeFiles/ascii_protein_tests.dir/tests/tests.cpp.o"
+}
+]

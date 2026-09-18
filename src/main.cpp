@@ -236,9 +236,15 @@ int main(int argc, char** argv) {
             return 0;
         }
 
-        const auto input = options.pdbId ? (options.fetchCif ? ascii_protein::fetchMmcif(*options.pdbId)
-                                    : ascii_protein::fetchPdb(*options.pdbId))
-                         : *options.input;
+        std::filesystem::path input;
+        if (!options.pdbId) input = *options.input;
+        else if (options.remoteFormat == ascii_protein::RemoteFormat::bcif) {
+            input = ascii_protein::fetchBinaryCif(*options.pdbId);
+        } else if (options.remoteFormat == ascii_protein::RemoteFormat::cif) {
+            input = ascii_protein::fetchMmcif(*options.pdbId);
+        } else {
+            input = ascii_protein::fetchPdb(*options.pdbId);
+        }
         auto structure = ascii_protein::loadStructure(input);
         for (const auto& warning : structure.warnings) std::cerr << "warning: " << warning << '\n';
         auto renderer = std::make_unique<ascii_protein::Renderer>(structure);

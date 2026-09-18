@@ -1,0 +1,11 @@
+/Users/anthonyegan/ascii-viewer/build-v011-release/CMakeFiles/ascii_protein_core.dir
+/Users/anthonyegan/ascii-viewer/build-v011-release/CMakeFiles/ascii-protein.dir
+/Users/anthonyegan/ascii-viewer/build-v011-release/CMakeFiles/release-package.dir
+/Users/anthonyegan/ascii-viewer/build-v011-release/CMakeFiles/ascii_protein_tests.dir
+/Users/anthonyegan/ascii-viewer/build-v011-release/CMakeFiles/test.dir
+/Users/anthonyegan/ascii-viewer/build-v011-release/CMakeFiles/edit_cache.dir
+/Users/anthonyegan/ascii-viewer/build-v011-release/CMakeFiles/rebuild_cache.dir
+/Users/anthonyegan/ascii-viewer/build-v011-release/CMakeFiles/list_install_components.dir
+/Users/anthonyegan/ascii-viewer/build-v011-release/CMakeFiles/install.dir
+/Users/anthonyegan/ascii-viewer/build-v011-release/CMakeFiles/install/local.dir
+/Users/anthonyegan/ascii-viewer/build-v011-release/CMakeFiles/install/strip.dir

@@ -150,7 +150,9 @@ void parseSecondaryRow(const std::vector<std::string>& row,
         row, columns, {prefix + "end_auth_seq_id", prefix + "end_label_seq_id"}));
     if (!startResidue || !endResidue || startChain.empty() || endChain.empty()) return;
     structure.secondaryRanges.push_back(
-        {type, startChain, *startResidue, endChain, *endResidue});
+        {type, startChain, *startResidue, endChain, *endResidue,
+         marker(value(row, columns, {prefix + "pdbx_beg_PDB_ins_code"})),
+         marker(value(row, columns, {prefix + "pdbx_end_PDB_ins_code"}))});
 }
 
 } // namespace

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ascii_protein VERSION 0.9.0 LANGUAGES CXX)
+project(ascii_protein VERSION 0.11.0 LANGUAGES CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -9,11 +9,13 @@ add_library(ascii_protein_core
     src/structure.cpp
     src/pdb_parser.cpp
     src/mmcif_parser.cpp
+    src/binarycif_parser.cpp
     src/structure_loader.cpp
     src/framebuffer.cpp
     src/renderer.cpp
     src/cli.cpp
     src/terminal.cpp
+    src/terminal_input.cpp
     src/rcsb.cpp
     src/command.cpp
     src/selection.cpp
@@ -36,6 +38,25 @@ endif()
 add_executable(ascii-protein src/main.cpp)
 target_link_libraries(ascii-protein PRIVATE ascii_protein_core)
 target_compile_definitions(ascii-protein PRIVATE ASCII_PROTEIN_VERSION="${PROJECT_VERSION}")
+
+if(WIN32)
+    set(ASCII_PROTEIN_RELEASE_PLATFORM "windows-x86_64")
+elseif(APPLE)
+    set(ASCII_PROTEIN_RELEASE_PLATFORM "macos-${CMAKE_SYSTEM_PROCESSOR}")
+else()
+    set(ASCII_PROTEIN_RELEASE_PLATFORM "linux-${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+add_custom_target(release-package
+    COMMAND ${CMAKE_COMMAND}
+        "-DBUILD_DIR=${CMAKE_BINARY_DIR}"
+        "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+        "-DOUTPUT_DIR=${CMAKE_BINARY_DIR}/release"
+        "-DVERSION=${PROJECT_VERSION}"
+        "-DPLATFORM=${ASCII_PROTEIN_RELEASE_PLATFORM}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/scripts/package_release.cmake"
+    DEPENDS ascii-protein
+    VERBATIM
+)
 
 include(GNUInstallDirs)
 install(TARGETS ascii-protein RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

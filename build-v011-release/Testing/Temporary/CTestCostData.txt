@@ -1,0 +1,2 @@
+ascii_protein_tests 2 0.00189194
+---

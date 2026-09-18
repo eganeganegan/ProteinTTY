@@ -84,7 +84,8 @@ Structure PdbParser::parse(std::istream& input, std::string sourceName) {
             const auto end = parseInteger(field(line, 33, 4));
             if (start && end) {
                 structure.secondaryRanges.push_back(
-                    {SecondaryStructure::helix, chainId(line, 19), *start, chainId(line, 31), *end});
+                    {SecondaryStructure::helix, chainId(line, 19), *start, chainId(line, 31), *end,
+                     character(line, 25), character(line, 37)});
             }
             continue;
         }
@@ -93,7 +94,8 @@ Structure PdbParser::parse(std::istream& input, std::string sourceName) {
             const auto end = parseInteger(field(line, 33, 4));
             if (start && end) {
                 structure.secondaryRanges.push_back(
-                    {SecondaryStructure::sheet, chainId(line, 21), *start, chainId(line, 32), *end});
+                    {SecondaryStructure::sheet, chainId(line, 21), *start, chainId(line, 32), *end,
+                     character(line, 26), character(line, 37)});
             }
             continue;
         }
