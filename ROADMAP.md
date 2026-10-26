@@ -68,8 +68,8 @@ This prototype predates the repository's retained release history; v0.2 is the f
 
 ## v0.12: Trajectory Workflows
 
-- Add a random-access DCD coordinate source using the existing topology supplied by PDB, mmCIF, or BinaryCIF.
-- Index large XYZ and DCD trajectories without retaining every frame in memory.
+- **Implemented:** Random-access DCD coordinates using the existing topology supplied by PDB, mmCIF, or BinaryCIF.
+- **Implemented:** Disk indexing for XYZ and DCD trajectories without retaining every frame in memory.
 - Add least-squares trajectory alignment to a reference frame for a selected atom set.
 - Add RMSD and RMSF calculations with selection-aware summaries and coloring.
 - Add playback range, stride, and frame-number controls for long simulations.

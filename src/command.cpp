@@ -311,7 +311,7 @@ void execute(const Command& command, CommandState state, CommandResult& result) 
         state.autorotate = toggleValue(command, 1, state.autorotate);
         } else if (verb == "play") {
             if (!state.trajectory) fail(command, 0, "trajectory controls are unavailable");
-            if (command.size() > 2) fail(command, 2, "usage: play [trajectory.xyz]");
+            if (command.size() > 2) fail(command, 2, "usage: play [trajectory.xyz|trajectory.dcd]");
             if (command.size() == 2) loadTrajectory(command[1].text, state.structure, *state.trajectory);
             else if (!state.trajectory->source) fail(command, 0, "no trajectory loaded");
             state.trajectory->playing = state.trajectory->source->frameCount() > 1;
@@ -534,7 +534,7 @@ std::string commandHelp(std::string_view command) {
     if (topic == "distance") return "distance <atom-serial|selection> <atom-serial|selection>";
     if (topic == "angle") return "angle <atom1> <atom2> <atom3>";
     if (topic == "dihedral") return "dihedral <atom1> <atom2> <atom3> <atom4>";
-    if (topic == "play") return "play [trajectory.xyz]";
+    if (topic == "play") return "play [trajectory.xyz|trajectory.dcd]";
     if (topic == "pause" || topic == "resume" || topic == "stop") return topic;
     if (topic == "step") return "step [signed-offset]";
     if (topic == "selection" || topic == "selections") {

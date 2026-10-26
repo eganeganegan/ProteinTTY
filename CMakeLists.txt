@@ -22,6 +22,7 @@ add_library(ascii_protein_core
     src/secondary_assignment.cpp
     src/trajectory.cpp
     src/xyz_trajectory_source.cpp
+    src/dcd_trajectory_source.cpp
 )
 target_include_directories(ascii_protein_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

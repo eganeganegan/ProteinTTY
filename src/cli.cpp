@@ -31,8 +31,9 @@ ColorMode parseColor(const std::string& value) {
 
 int parseDimension(const std::string& value, std::string_view option) {
     try {
-        const int result = std::stoi(value);
-        if (result < 10 || result > 1000) throw std::runtime_error("");
+        std::size_t used = 0;
+        const int result = std::stoi(value, &used);
+        if (used != value.size() || result < 10 || result > 1000) throw std::runtime_error("");
         return result;
     } catch (...) {
         throw std::runtime_error("invalid value for " + std::string(option) + ": " + value);
@@ -60,9 +61,10 @@ CliOptions parseCli(int argc, char** argv) {
         else if (argument == "--version") options.version = true;
         else if (argument == "--command") options.commands.push_back(requireValue(index, argc, argv, argument));
         else if (argument == "--script") options.scripts.emplace_back(requireValue(index, argc, argv, argument));
-            else if (argument == "--trajectory") options.trajectory = requireValue(index, argc, argv, argument);
-            else if (argument == "--frame-delay") options.frameDelayMs = parseFrameDelay(requireValue(index, argc, argv, argument));
-            else if (argument == "--loop") options.trajectoryLoop = true;
+        else if (argument == "--trajectory") options.trajectory = requireValue(index, argc, argv, argument);
+        else if (argument == "--frame-delay") {
+            options.frameDelayMs = parseFrameDelay(requireValue(index, argc, argv, argument));
+        } else if (argument == "--loop") options.trajectoryLoop = true;
         else if (argument == "--pdb") options.pdbId = requireValue(index, argc, argv, argument);
         else if (argument == "--format") {
             const auto value = requireValue(index, argc, argv, argument);
@@ -113,9 +115,9 @@ std::string helpText() {
         "Options:\n"
         "  --command TEXT   Execute a viewer command (repeatable)\n"
         "  --script FILE    Execute commands from a .ptty script\n"
-            "  --trajectory FILE  Play a multi-frame XYZ trajectory\n"
-            "  --frame-delay MS   Trajectory frame delay, 10..10000 (default 100)\n"
-            "  --loop             Loop trajectory playback\n"
+        "  --trajectory FILE  Play a multi-frame XYZ or DCD trajectory\n"
+        "  --frame-delay MS   Trajectory frame delay, 10..10000 (default 100)\n"
+        "  --loop             Loop trajectory playback\n"
         "  --pdb ID         Download and cache a structure from RCSB\n"
         "  --format pdb|cif|bcif  Remote structure format (default pdb)\n"
         "  --mode atoms|backbone|ca|ball-stick|residue\n"

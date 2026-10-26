@@ -1,6 +1,7 @@
 #include "ascii_protein/command.hpp"
 #include "ascii_protein/binarycif_parser.hpp"
 #include "ascii_protein/cli.hpp"
+#include "ascii_protein/dcd_trajectory_source.hpp"
 #include "ascii_protein/geometry.hpp"
 #include "ascii_protein/mmcif_parser.hpp"
 #include "ascii_protein/pdb_parser.hpp"
@@ -92,6 +93,94 @@ std::string littleEndianDoubles(std::initializer_list<double> values) {
         for (int shift = 0; shift < 64; shift += 8) result.push_back(static_cast<char>((bits >> shift) & 0xff));
     }
     return result;
+}
+
+void appendDcdU32(std::string& output, std::uint32_t value, bool bigEndian) {
+    if (bigEndian) {
+        for (int shift = 24; shift >= 0; shift -= 8) output.push_back(static_cast<char>((value >> shift) & 0xff));
+    } else {
+        for (int shift = 0; shift <= 24; shift += 8) output.push_back(static_cast<char>((value >> shift) & 0xff));
+    }
+}
+
+void setDcdU32(std::string& output, std::size_t offset, std::uint32_t value, bool bigEndian) {
+    std::string encoded;
+    appendDcdU32(encoded, value, bigEndian);
+    output.replace(offset, encoded.size(), encoded);
+}
+
+void appendDcdRecord(std::string& output, const std::string& payload, bool bigEndian) {
+    appendDcdU32(output, static_cast<std::uint32_t>(payload.size()), bigEndian);
+    output += payload;
+    appendDcdU32(output, static_cast<std::uint32_t>(payload.size()), bigEndian);
+}
+
+std::string dcdFixture(bool bigEndian = false, bool unitCell = false) {
+    std::string output;
+    std::string header(84, '\0');
+    header.replace(0, 4, "CORD");
+    setDcdU32(header, 4, 2, bigEndian);
+    setDcdU32(header, 4 + 10 * 4, unitCell ? 1 : 0, bigEndian);
+    setDcdU32(header, 4 + 19 * 4, 24, bigEndian);
+    appendDcdRecord(output, header, bigEndian);
+    std::string title;
+    appendDcdU32(title, 1, bigEndian);
+    title.append("ProteinTTY DCD test fixture", 26);
+    title.resize(84, ' ');
+    appendDcdRecord(output, title, bigEndian);
+    std::string atomCount;
+    appendDcdU32(atomCount, 2, bigEndian);
+    appendDcdRecord(output, atomCount, bigEndian);
+
+    const auto coordinates = [&](float first, float second) {
+        std::string payload;
+        const auto appendFloat = [&](float value) {
+            appendDcdU32(payload, std::bit_cast<std::uint32_t>(value), bigEndian);
+        };
+        appendFloat(first);
+        appendFloat(second);
+        appendDcdRecord(output, payload, bigEndian);
+    };
+    for (int frame = 0; frame < 2; ++frame) {
+        if (unitCell) appendDcdRecord(output, std::string(48, '\0'), bigEndian);
+        coordinates(0.0F, frame == 0 ? 2.0F : 4.0F);
+        coordinates(0.0F, 0.0F);
+        coordinates(0.0F, 0.0F);
+    }
+    return output;
+}
+
+std::string fixedAtomDcdFixture() {
+    std::string output;
+    std::string header(84, '\0');
+    header.replace(0, 4, "CORD");
+    setDcdU32(header, 4, 2, false);
+    setDcdU32(header, 4 + 8 * 4, 1, false);
+    setDcdU32(header, 4 + 19 * 4, 24, false);
+    appendDcdRecord(output, header, false);
+    std::string title;
+    appendDcdU32(title, 1, false);
+    title.resize(84, ' ');
+    appendDcdRecord(output, title, false);
+    std::string atomCount;
+    appendDcdU32(atomCount, 3, false);
+    appendDcdRecord(output, atomCount, false);
+    std::string freeAtoms;
+    appendDcdU32(freeAtoms, 1, false);
+    appendDcdU32(freeAtoms, 3, false);
+    appendDcdRecord(output, freeAtoms, false);
+    const auto coordinates = [&](std::initializer_list<float> values) {
+        std::string payload;
+        for (const float value : values) appendDcdU32(payload, std::bit_cast<std::uint32_t>(value), false);
+        appendDcdRecord(output, payload, false);
+    };
+    coordinates({0.0F, 10.0F, 20.0F});
+    coordinates({0.0F, 0.0F, 0.0F});
+    coordinates({0.0F, 0.0F, 0.0F});
+    coordinates({1.0F, 21.0F});
+    coordinates({2.0F, 22.0F});
+    coordinates({3.0F, 23.0F});
+    return output;
 }
 
 void writeByteEncoding(MessagePackWriter& writer, int type) {
@@ -849,6 +938,16 @@ void testCommandCliOptions() {
         require(std::string(error.what()).find("invalid frame delay") != std::string::npos,
                 "invalid frame delay error");
     }
+    char widthOption[] = "--width";
+    char invalidWidth[] = "80columns";
+    char* invalidWidthArguments[] = {executable, input, widthOption, invalidWidth};
+    try {
+        static_cast<void>(ascii_protein::parseCli(4, invalidWidthArguments));
+        require(false, "dimension with trailing text rejected");
+    } catch (const std::runtime_error& error) {
+        require(std::string(error.what()).find("invalid value for --width") != std::string::npos,
+                "invalid dimension error");
+    }
 }
 
 void testXyzTrajectory() {
@@ -944,6 +1043,18 @@ void testXyzTrajectory() {
         require(std::string(error.what()).find("atom label changed") != std::string::npos,
                 "changed XYZ label error");
     }
+    const auto negativeCount = std::filesystem::temp_directory_path() / "protein-tty-negative-count.xyz";
+    {
+        std::ofstream output(negativeCount);
+        output << "-1\ninvalid\n";
+    }
+    try {
+        static_cast<void>(ascii_protein::XyzTrajectorySource(negativeCount));
+        require(false, "negative XYZ atom count rejected");
+    } catch (const std::runtime_error& error) {
+        require(std::string(error.what()).find("invalid atom count") != std::string::npos,
+                "negative XYZ atom count error");
+    }
     auto mismatchedElements = structure;
     mismatchedElements.atoms[1].element = "N";
     try {
@@ -957,6 +1068,81 @@ void testXyzTrajectory() {
     std::filesystem::remove(path);
     std::filesystem::remove(malformed);
     std::filesystem::remove(changedLabel);
+    std::filesystem::remove(negativeCount);
+}
+
+void testDcdTrajectory() {
+    const auto path = std::filesystem::temp_directory_path() / "protein-tty-trajectory.dcd";
+    {
+        std::ofstream output(path, std::ios::binary);
+        const auto fixture = dcdFixture(false, true);
+        output.write(fixture.data(), static_cast<std::streamsize>(fixture.size()));
+    }
+    ascii_protein::DcdTrajectorySource source(path);
+    require(source.atomCount() == 2 && source.frameCount() == 2, "DCD trajectory dimensions");
+    require(source.atomLabel(0).empty() && source.frameLabel(1).empty(), "DCD label-free metadata");
+    require(near(source.frame(1)[1].x, 4.0) && near(source.frame(0)[1].x, 2.0),
+            "DCD random frame access");
+
+    ascii_protein::Structure structure;
+    for (int index = 0; index < 2; ++index) {
+        ascii_protein::Atom atom;
+        atom.serial = index + 1;
+        atom.name = index == 0 ? "CA" : "N";
+        atom.element = index == 0 ? "C" : "N";
+        atom.residueName = "GLY";
+        atom.residueNumber = 1;
+        atom.chain = "A";
+        atom.occupancy = 1.0;
+        structure.atoms.push_back(std::move(atom));
+    }
+    structure.finalize();
+    ascii_protein::TrajectoryState trajectory;
+    ascii_protein::loadTrajectory(path, structure, trajectory);
+    require(trajectory.frameIndex == 0 && near(structure.atoms[1].position.x, 1.0),
+            "DCD trajectory dispatch and centering");
+    require(ascii_protein::stepTrajectory(structure, trajectory) && near(structure.atoms[1].position.x, 2.0),
+            "DCD trajectory playback");
+
+    const auto bigEndianPath = std::filesystem::temp_directory_path() / "protein-tty-big-endian.dcd";
+    {
+        std::ofstream output(bigEndianPath, std::ios::binary);
+        const auto fixture = dcdFixture(true);
+        output.write(fixture.data(), static_cast<std::streamsize>(fixture.size()));
+    }
+    ascii_protein::DcdTrajectorySource bigEndian(bigEndianPath);
+    require(near(bigEndian.frame(1)[1].x, 4.0), "big-endian DCD decoding");
+
+    const auto fixedPath = std::filesystem::temp_directory_path() / "protein-tty-fixed-atoms.dcd";
+    {
+        std::ofstream output(fixedPath, std::ios::binary);
+        const auto fixture = fixedAtomDcdFixture();
+        output.write(fixture.data(), static_cast<std::streamsize>(fixture.size()));
+    }
+    ascii_protein::DcdTrajectorySource fixed(fixedPath);
+    const auto& fixedFrame = fixed.frame(1);
+    require(near(fixedFrame[0].x, 1.0) && near(fixedFrame[0].y, 2.0) && near(fixedFrame[0].z, 3.0) &&
+                near(fixedFrame[1].x, 10.0) && near(fixedFrame[2].x, 21.0),
+            "DCD fixed atoms retain first-frame coordinates");
+
+    const auto truncatedPath = std::filesystem::temp_directory_path() / "protein-tty-truncated.dcd";
+    {
+        std::ofstream output(truncatedPath, std::ios::binary);
+        auto fixture = dcdFixture();
+        fixture.resize(fixture.size() - 2);
+        output.write(fixture.data(), static_cast<std::streamsize>(fixture.size()));
+    }
+    try {
+        static_cast<void>(ascii_protein::DcdTrajectorySource(truncatedPath));
+        require(false, "truncated DCD rejected");
+    } catch (const std::runtime_error& error) {
+        require(std::string(error.what()).find("truncated DCD") != std::string::npos,
+                "truncated DCD error");
+    }
+    std::filesystem::remove(path);
+    std::filesystem::remove(bigEndianPath);
+    std::filesystem::remove(fixedPath);
+    std::filesystem::remove(truncatedPath);
 }
 
 } // namespace
@@ -978,6 +1164,7 @@ int main() {
         testSelections();
         testCommandCliOptions();
         testXyzTrajectory();
+        testDcdTrajectory();
         std::cout << "All tests passed\n";
         return 0;
     } catch (const std::exception& error) {

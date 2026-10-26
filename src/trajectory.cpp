@@ -1,11 +1,13 @@
 #include "ascii_protein/trajectory.hpp"
 
+#include "ascii_protein/dcd_trajectory_source.hpp"
 #include "ascii_protein/structure.hpp"
 #include "ascii_protein/xyz_trajectory_source.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <sstream>
 #include <stdexcept>
-#include <cctype>
 
 namespace ascii_protein {
 namespace {
@@ -18,16 +20,22 @@ std::string normalizedElement(std::string value) {
 } // namespace
 
 void loadTrajectory(const std::filesystem::path& path, Structure& structure, TrajectoryState& state) {
-    auto source = std::make_unique<XyzTrajectorySource>(path);
+    std::string extension = path.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(),
+                   [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+    std::unique_ptr<CoordinateFrameSource> source;
+    if (extension == ".dcd") source = std::make_unique<DcdTrajectorySource>(path);
+    else source = std::make_unique<XyzTrajectorySource>(path);
     if (source->atomCount() != structure.atoms.size()) {
         throw std::runtime_error("trajectory has " + std::to_string(source->atomCount()) +
                                  " atoms; structure has " + std::to_string(structure.atoms.size()));
     }
     for (std::size_t index = 0; index < structure.atoms.size(); ++index) {
-        if (!structure.atoms[index].element.empty() &&
-            source->atomLabel(index) != normalizedElement(structure.atoms[index].element)) {
+        const auto sourceLabel = source->atomLabel(index);
+        if (!sourceLabel.empty() && !structure.atoms[index].element.empty() &&
+            sourceLabel != normalizedElement(structure.atoms[index].element)) {
             throw std::runtime_error("trajectory atom " + std::to_string(index + 1) + " is " +
-                                     std::string(source->atomLabel(index)) + "; topology atom is " +
+                                     std::string(sourceLabel) + "; topology atom is " +
                                      structure.atoms[index].element);
         }
     }
