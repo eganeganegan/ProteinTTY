@@ -7,6 +7,8 @@
 
 namespace ascii_protein {
 
+constexpr int xterm256Color(int index) { return 256 + index; }
+
 struct Cell {
     char32_t glyph{U' '};
     int color{0};

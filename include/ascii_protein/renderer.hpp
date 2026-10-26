@@ -19,10 +19,10 @@ enum class Charset { ascii, unicode };
 enum class RendererBackend { cells, braille };
 
 struct RenderSettings {
-    RenderMode mode{RenderMode::ballAndStick};
-    ColorMode colorMode{ColorMode::element};
+    RenderMode mode{RenderMode::alphaTrace};
+    ColorMode colorMode{ColorMode::secondary};
     Charset charset{Charset::unicode};
-    RendererBackend backend{RendererBackend::cells};
+    RendererBackend backend{RendererBackend::braille};
     bool color{true};
     bool showInfo{true};
     bool showSequence{false};
@@ -79,8 +79,12 @@ private:
     void drawAtom(std::size_t atomIndex, const Camera& camera, const RenderSettings& settings, int viewWidth,
                   int height);
     void drawLine(std::size_t first, std::size_t second, const Camera& camera, const RenderSettings& settings,
-                  int viewWidth, int height);
+                  int viewWidth, int height, int thickness = 0);
+    void drawLine(const Vec3& startPosition, const Vec3& endPosition, std::size_t colorAtom,
+                  const Camera& camera, const RenderSettings& settings, int viewWidth, int height, int thickness);
+    void drawAlphaTrace(const Camera& camera, const RenderSettings& settings, int viewWidth, int height);
     int atomColor(std::size_t atomIndex, const RenderSettings& settings) const;
+    int depthColor(int color, double depth) const;
     void putPixel(int x, int y, double depth, char32_t glyph, int color);
     void prepareBraille(int width, int height);
     void composeBraille(int viewWidth, int height);

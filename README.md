@@ -55,6 +55,7 @@ Braille backend is in [`assets/ubiquitin-braille.txt`](assets/ubiquitin-braille.
 - Reusable off-screen framebuffer with per-cell z-buffering
 - Depth fog, directional fake lighting, atom-size hints, and terminal aspect-ratio correction
 - Unicode, portable ASCII, and depth-tested 2x4 subcell Braille rendering
+- Spline-smoothed C-alpha traces with thicker Braille strokes and hue-preserving 256-color depth bands
 - Element, chain, residue class, B-factor, and secondary-structure color modes
 - Atom, backbone, C-alpha trace, ball-and-stick, and one-point-per-residue modes
 - Spatially indexed covalent-radius bond inference restricted to nearby residues
@@ -125,7 +126,7 @@ Select an initial presentation:
 ./build/ascii-protein examples/1crn.pdb --mode ca --color residue --projection ortho
 ./build/ascii-protein examples/1crn.cif --renderer braille --color secondary
 ./build/ascii-protein structure.bcif --renderer braille
-./build/ascii-protein examples/1crn.pdb --mode ball-stick --color element --charset unicode
+./build/ascii-protein examples/1crn.pdb --renderer cells --mode ball-stick --color element --charset unicode
 ./build/ascii-protein examples/1ubq.pdb --renderer braille --mode ca --color secondary
 ./build/ascii-protein --pdb 4HHB --renderer braille
 ./build/ascii-protein --pdb 4HHB --format cif --renderer braille

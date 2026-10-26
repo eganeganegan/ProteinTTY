@@ -26,6 +26,13 @@ std::string utf8(char32_t codepoint) {
     return output;
 }
 
+std::string foregroundEscape(int color) {
+    if (color >= xterm256Color(0)) {
+        return "\x1b[38;5;" + std::to_string(color - xterm256Color(0)) + 'm';
+    }
+    return "\x1b[" + std::to_string(color) + 'm';
+}
+
 } // namespace
 
 Framebuffer::Framebuffer(int width, int height) { resize(width, height); }
@@ -74,7 +81,7 @@ std::string Framebuffer::toString(bool ansiColor, int backgroundColor) const {
                 output += cell.color == 0
                               ? "\x1b[0m" + (backgroundColor == 0 ? std::string{} :
                                                "\x1b[" + std::to_string(backgroundColor) + "m")
-                              : "\x1b[" + std::to_string(cell.color) + "m";
+                              : foregroundEscape(cell.color);
                 activeColor = cell.color;
             }
             output += utf8(cell.glyph);

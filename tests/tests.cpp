@@ -446,11 +446,15 @@ void testParserAndModel() {
 
     ascii_protein::RenderSettings braille;
     braille.backend = ascii_protein::RendererBackend::braille;
+    braille.mode = ascii_protein::RenderMode::alphaTrace;
     braille.showInfo = false;
-    const auto brailleText = renderer.render(camera, braille, 40, 16).toPlainText();
+    const auto& brailleFrame = renderer.render(camera, braille, 40, 16);
+    const auto brailleText = brailleFrame.toPlainText();
     require(brailleText.find("\xe2\xa0") != std::string::npos || brailleText.find("\xe2\xa1") != std::string::npos ||
                 brailleText.find("\xe2\xa2") != std::string::npos || brailleText.find("\xe2\xa3") != std::string::npos,
             "Braille subcell rendering");
+    require(brailleFrame.toString(true).find("\x1b[38;5;") != std::string::npos,
+            "Braille rendering uses depth-aware 256-color output");
 
     auto inspected = ascii_protein::RenderSettings{};
     inspected.inspectedAtom = renderer.nearestAtom(camera, inspected, 80, 24);

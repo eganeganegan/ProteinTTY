@@ -75,6 +75,35 @@ GridCell gridCell(const Vec3& position, double cellSize) {
             static_cast<int>(std::floor(position.z / cellSize))};
 }
 
+Vec3 catmullRom(const Vec3& p0, const Vec3& p1, const Vec3& p2, const Vec3& p3, double amount) {
+    const double squared = amount * amount;
+    const double cubed = squared * amount;
+    return (p1 * 2.0 + (p2 - p0) * amount +
+            (p0 * 2.0 - p1 * 5.0 + p2 * 4.0 - p3) * squared +
+            (p3 - p0 + (p1 - p2) * 3.0) * cubed) * 0.5;
+}
+
+struct DepthPalette {
+    int near;
+    int middle;
+    int far;
+};
+
+DepthPalette depthPalette(int color) {
+    switch (color) {
+    case 30: return {240, 236, 232};
+    case 31: case 91: return {203, 160, 88};
+    case 32: case 92: return {83, 34, 22};
+    case 33: case 93: return {227, 178, 58};
+    case 34: case 94: return {75, 27, 17};
+    case 35: case 95: return {207, 129, 53};
+    case 36: case 96: return {87, 37, 23};
+    case 37: case 97: return {255, 250, 244};
+    case 90: return {250, 244, 238};
+    default: return {255, 250, 244};
+    }
+}
+
 } // namespace
 
 std::vector<Bond> inferBonds(const Structure& structure) {
@@ -193,6 +222,15 @@ int Renderer::atomColor(std::size_t atomIndex, const RenderSettings& settings) c
     return 97;
 }
 
+int Renderer::depthColor(int color, double depth) const {
+    if (color == 0 || color >= xterm256Color(0)) return color;
+    const double radius = std::max(1.0, structure_.boundingRadius);
+    const double distance = std::clamp((depth / radius - 2.15) / 2.1, 0.0, 1.0);
+    const auto palette = depthPalette(color);
+    const int index = distance < 0.33 ? palette.near : distance < 0.68 ? palette.middle : palette.far;
+    return xterm256Color(index);
+}
+
 std::optional<std::size_t> Renderer::nearestAtom(const Camera& camera, const RenderSettings& settings, int width,
                                                  int height) const {
     const int panelWidth = settings.showInfo && width >= 72 ? 28 : 0;
@@ -238,29 +276,78 @@ void Renderer::drawAtom(std::size_t atomIndex, const Camera& camera, const Rende
             const double lighting = std::clamp(0.2 + normalizedDepth * 0.45 + surface * 0.35 - offsetY * 0.06, 0.0, 1.0);
             putPixel(static_cast<int>(std::round(point.projected.x)) + offsetX,
                      static_cast<int>(std::round(point.projected.y)) + offsetY,
-                     point.projected.depth - surface * 0.2, shadeGlyph(settings.charset, lighting), color);
+                     point.projected.depth - surface * 0.2, shadeGlyph(settings.charset, lighting),
+                     depthColor(color, point.projected.depth - surface * 0.2));
         }
     }
 }
 
 void Renderer::drawLine(std::size_t first, std::size_t second, const Camera& camera, const RenderSettings& settings,
-                        int viewWidth, int height) {
+                        int viewWidth, int height, int thickness) {
     if ((first < settings.visibleAtoms.size() && !settings.visibleAtoms[first]) ||
         (second < settings.visibleAtoms.size() && !settings.visibleAtoms[second])) return;
-    const auto start = transform(structure_.atoms[first].position, camera, viewWidth, height, settings.backend).projected;
-    const auto end = transform(structure_.atoms[second].position, camera, viewWidth, height, settings.backend).projected;
+    drawLine(structure_.atoms[first].position, structure_.atoms[second].position, first, camera, settings,
+             viewWidth, height, thickness);
+}
+
+void Renderer::drawLine(const Vec3& startPosition, const Vec3& endPosition, std::size_t colorAtom,
+                        const Camera& camera, const RenderSettings& settings, int viewWidth, int height,
+                        int thickness) {
+    const auto start = transform(startPosition, camera, viewWidth, height, settings.backend).projected;
+    const auto end = transform(endPosition, camera, viewWidth, height, settings.backend).projected;
     if (!start.visible || !end.visible) return;
     const double deltaX = end.x - start.x;
     const double deltaY = end.y - start.y;
     const int steps = std::max(1, static_cast<int>(std::ceil(std::max(std::abs(deltaX), std::abs(deltaY)))));
-    const int color = atomColor(first, settings);
+    const int color = atomColor(colorAtom, settings);
     for (int step = 0; step <= steps; ++step) {
         const double amount = static_cast<double>(step) / steps;
         const int x = static_cast<int>(std::round(start.x + deltaX * amount));
         const int y = static_cast<int>(std::round(start.y + deltaY * amount));
         const double depth = start.depth + (end.depth - start.depth) * amount + 0.05;
-        putPixel(x, y, depth, settings.charset == Charset::ascii ? U'.' : U'\u00b7', color);
+        for (int offsetY = -thickness; offsetY <= thickness; ++offsetY) {
+            for (int offsetX = -thickness; offsetX <= thickness; ++offsetX) {
+                if (std::abs(offsetX) + std::abs(offsetY) > thickness) continue;
+                putPixel(x + offsetX, y + offsetY, depth, settings.charset == Charset::ascii ? U'.' : U'\u00b7',
+                         depthColor(color, depth));
+            }
+        }
     }
+}
+
+void Renderer::drawAlphaTrace(const Camera& camera, const RenderSettings& settings, int viewWidth, int height) {
+    std::vector<std::size_t> run;
+    const int thickness = renderingBraille_ ? 1 : 0;
+    const auto drawRun = [&] {
+        if (run.size() < 2) {
+            run.clear();
+            return;
+        }
+        for (std::size_t segment = 0; segment + 1 < run.size(); ++segment) {
+            const Vec3& p0 = structure_.atoms[run[segment == 0 ? segment : segment - 1]].position;
+            const Vec3& p1 = structure_.atoms[run[segment]].position;
+            const Vec3& p2 = structure_.atoms[run[segment + 1]].position;
+            const Vec3& p3 = structure_.atoms[run[segment + 2 < run.size() ? segment + 2 : segment + 1]].position;
+            Vec3 previous = p1;
+            constexpr int subdivisions = 6;
+            for (int step = 1; step <= subdivisions; ++step) {
+                const Vec3 current = catmullRom(p0, p1, p2, p3,
+                                                static_cast<double>(step) / subdivisions);
+                drawLine(previous, current, run[segment], camera, settings, viewWidth, height, thickness);
+                previous = current;
+            }
+        }
+        run.clear();
+    };
+
+    for (std::size_t index = 0; index < structure_.atoms.size(); ++index) {
+        const auto& atom = structure_.atoms[index];
+        if (atom.name != "CA") continue;
+        const bool hidden = index < settings.visibleAtoms.size() && !settings.visibleAtoms[index];
+        if (hidden || (!run.empty() && !residuesAreAdjacent(structure_.atoms[run.back()], atom))) drawRun();
+        if (!hidden) run.push_back(index);
+    }
+    drawRun();
 }
 
 void Renderer::putPixel(int x, int y, double depth, char32_t glyph, int color) {
@@ -424,14 +511,7 @@ const Framebuffer& Renderer::render(const Camera& camera, const RenderSettings& 
             previous = index;
         }
     } else if (settings.mode == RenderMode::alphaTrace) {
-        std::optional<std::size_t> previous;
-        for (std::size_t index = 0; index < structure_.atoms.size(); ++index) {
-            if (structure_.atoms[index].name != "CA") continue;
-            if (previous && residuesAreAdjacent(structure_.atoms[*previous], structure_.atoms[index])) {
-                drawLine(*previous, index, camera, settings, rasterWidth, rasterHeight);
-            }
-            previous = index;
-        }
+        drawAlphaTrace(camera, settings, rasterWidth, rasterHeight);
     }
 
     for (std::size_t index = 0; index < structure_.atoms.size(); ++index) {
