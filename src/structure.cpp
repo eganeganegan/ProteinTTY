@@ -5,6 +5,7 @@
 #include <cctype>
 #include <limits>
 #include <map>
+#include <stdexcept>
 #include <tuple>
 #include <unordered_map>
 

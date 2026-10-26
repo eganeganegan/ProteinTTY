@@ -5,6 +5,7 @@
 #include "ascii_protein/selection.hpp"
 #include "ascii_protein/structure.hpp"
 
+#include <array>
 #include <cstddef>
 #include <optional>
 #include <string>

@@ -30,7 +30,7 @@ char32_t shadeGlyph(Charset charset, double brightness) {
         constexpr std::string_view ramp = ".,:;irsXA253hMHGS#9B&@";
         return static_cast<unsigned char>(ramp[static_cast<std::size_t>(brightness * ramp.size())]);
     }
-    constexpr std::array<char32_t, 6> ramp{U'·', U'•', U'░', U'▒', U'▓', U'█'};
+    constexpr std::array<char32_t, 6> ramp{U'\u00b7', U'\u2022', U'\u2591', U'\u2592', U'\u2593', U'\u2588'};
     return ramp[static_cast<std::size_t>(brightness * ramp.size())];
 }
 
@@ -259,7 +259,7 @@ void Renderer::drawLine(std::size_t first, std::size_t second, const Camera& cam
         const int x = static_cast<int>(std::round(start.x + deltaX * amount));
         const int y = static_cast<int>(std::round(start.y + deltaY * amount));
         const double depth = start.depth + (end.depth - start.depth) * amount + 0.05;
-        putPixel(x, y, depth, settings.charset == Charset::ascii ? U'.' : U'·', color);
+        putPixel(x, y, depth, settings.charset == Charset::ascii ? U'.' : U'\u00b7', color);
     }
 }
 
