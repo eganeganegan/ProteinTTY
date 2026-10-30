@@ -61,6 +61,8 @@ CliOptions parseCli(int argc, char** argv) {
         else if (argument == "--version") options.version = true;
         else if (argument == "--command") options.commands.push_back(requireValue(index, argc, argv, argument));
         else if (argument == "--script") options.scripts.emplace_back(requireValue(index, argc, argv, argument));
+        else if (argument == "--config")
+            options.config = requireValue(index, argc, argv, argument);
         else if (argument == "--trajectory") options.trajectory = requireValue(index, argc, argv, argument);
         else if (argument == "--frame-delay") {
             options.frameDelayMs = parseFrameDelay(requireValue(index, argc, argv, argument));
@@ -109,29 +111,29 @@ CliOptions parseCli(int argc, char** argv) {
 }
 
 std::string helpText() {
-    return
-        "ProteinTTY - interactive terminal protein viewer\n\n"
-        "Usage: ascii-protein <structure.pdb|structure.cif|structure.bcif> [options]\n\n"
-        "Options:\n"
-        "  --command TEXT   Execute a viewer command (repeatable)\n"
-        "  --script FILE    Execute commands from a .ptty script\n"
-        "  --trajectory FILE  Play a multi-frame XYZ or DCD trajectory\n"
-        "  --frame-delay MS   Trajectory frame delay, 10..10000 (default 100)\n"
-        "  --loop             Loop trajectory playback\n"
-        "  --pdb ID         Download and cache a structure from RCSB\n"
-        "  --format pdb|cif|bcif  Remote structure format (default pdb)\n"
-        "  --mode atoms|backbone|ca|ball-stick|residue\n"
-        "  --color element|chain|residue|bfactor|secondary\n"
-        "  --charset ascii|unicode\n"
-        "  --renderer cells|braille\n"
-        "  --projection perspective|ortho\n"
-        "  --no-color       Disable ANSI colors\n"
-        "  --spin           Autorotate without the information panel\n"
-        "  --snapshot       Render one plain-text frame and exit\n"
-        "  --width N        Static snapshot width (default 100)\n"
-        "  --height N       Static snapshot height (default 32)\n"
-        "  --version        Print version\n"
-        "  -h, --help       Print this help\n";
+    return "ProteinTTY - interactive terminal protein viewer\n\n"
+           "Usage: ascii-protein <structure.pdb|structure.cif|structure.bcif> [options]\n\n"
+           "Options:\n"
+           "  --command TEXT   Execute a viewer command (repeatable)\n"
+           "  --script FILE    Execute commands from a .ptty script\n"
+           "  --config FILE    Load command macros and optional ASCII key bindings\n"
+           "  --trajectory FILE  Play a multi-frame XYZ or DCD trajectory\n"
+           "  --frame-delay MS   Trajectory frame delay, 10..10000 (default 100)\n"
+           "  --loop             Loop trajectory playback\n"
+           "  --pdb ID         Download and cache a structure from RCSB\n"
+           "  --format pdb|cif|bcif  Remote structure format (default pdb)\n"
+           "  --mode atoms|backbone|ca|ball-stick|residue\n"
+           "  --color element|chain|residue|bfactor|secondary\n"
+           "  --charset ascii|unicode\n"
+           "  --renderer cells|braille\n"
+           "  --projection perspective|ortho\n"
+           "  --no-color       Disable ANSI colors\n"
+           "  --spin           Autorotate without the information panel\n"
+           "  --snapshot       Render one plain-text frame and exit\n"
+           "  --width N        Static snapshot width (default 100)\n"
+           "  --height N       Static snapshot height (default 32)\n"
+           "  --version        Print version\n"
+           "  -h, --help       Print this help\n";
 }
 
 } // namespace ascii_protein

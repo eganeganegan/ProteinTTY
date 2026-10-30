@@ -1,4 +1,5 @@
 #include "ascii_protein/mmcif_parser.hpp"
+#include "ascii_protein/molecular.hpp"
 
 #include <charconv>
 #include <cctype>
@@ -113,9 +114,12 @@ void parseAtomRow(const std::vector<std::string>& row,
         return;
     }
     const auto model = integer(value(row, columns, {"_atom_site.pdbx_PDB_model_num"}));
-    if (model && *model != 1) return;
 
     Atom atom;
+    atom.model = model.value_or(1);
+    atom.labelChain = value(row, columns, {"_atom_site.label_asym_id"});
+    atom.labelName = value(row, columns, {"_atom_site.label_atom_id"});
+    atom.labelResidue = integer(value(row, columns, {"_atom_site.label_seq_id"})).value_or(0);
     atom.serial = *serial;
     atom.name = value(row, columns, {"_atom_site.auth_atom_id", "_atom_site.label_atom_id"});
     atom.alternateLocation = marker(value(row, columns, {"_atom_site.label_alt_id"}));
@@ -169,8 +173,18 @@ Structure MmcifParser::parse(std::istream& input, std::string sourceName) {
     const auto tokens = tokenize(input);
     std::size_t position = 0;
     std::size_t atomRow = 0;
+    std::map<std::string, MetadataRow> singleRows;
     while (position < tokens.size()) {
-        if (tokens[position++] != "loop_") continue;
+        if (tokens[position] != "loop_") {
+            const auto tag = tokens[position++];
+            if (tag.starts_with("_") && position < tokens.size()) {
+                const auto dot = tag.find('.');
+                if (dot != std::string::npos)
+                    singleRows[tag.substr(0, dot)][tag.substr(dot + 1)] = tokens[position++];
+            }
+            continue;
+        }
+        ++position;
         std::vector<std::string> tags;
         while (position < tokens.size() && tokens[position].starts_with("_")) tags.push_back(tokens[position++]);
         if (tags.empty()) continue;
@@ -188,11 +202,21 @@ Structure MmcifParser::parse(std::istream& input, std::string sourceName) {
             std::vector<std::string> row(tokens.begin() + static_cast<std::ptrdiff_t>(position),
                                          tokens.begin() + static_cast<std::ptrdiff_t>(position + tags.size()));
             position += tags.size();
+            const auto category = tags.front().substr(0, tags.front().find('.'));
+            if (category == "_struct_conn" || category == "_pdbx_struct_oper_list" ||
+                category == "_pdbx_struct_assembly_gen") {
+                MetadataRow metadata;
+                for (std::size_t i = 0; i < tags.size(); ++i)
+                    metadata[tags[i].substr(tags[i].find('.') + 1)] = row[i];
+                readMolecularRow(structure, category, metadata);
+            }
             if (atomLoop) parseAtomRow(row, columns, structure, ++atomRow);
             else if (helixLoop) parseSecondaryRow(row, columns, SecondaryStructure::helix, structure);
             else if (sheetLoop) parseSecondaryRow(row, columns, SecondaryStructure::sheet, structure);
         }
     }
+    for (const auto& [category, row] : singleRows)
+        readMolecularRow(structure, category, row);
     if (structure.atoms.empty()) throw std::runtime_error("no valid atom_site records in " + structure.sourceName);
     structure.finalize();
     return structure;

@@ -66,6 +66,9 @@ Braille backend is in [`assets/ubiquitin-braille.txt`](assets/ubiquitin-braille.
 - Validated `--pdb ID` downloads with an XDG-compatible local RCSB cache
 - Autorotation, clean screensaver mode, resize handling, and plain-text snapshots
 - Disk-indexed XYZ and DCD trajectory playback with random access, pause, stepping, speed, and loop controls
+- Selection-based trajectory alignment, RMSD/RMSF analysis, per-atom analysis colors, and playback ranges and stride
+- Deposited connectivity, biological assemblies, model switching, PDB/mmCIF export, and collision-aware labels
+- MRC/CCP4 density slices, saved viewer sessions, command macros, and optional ASCII key bindings
 - RAII terminal restoration after normal exits and caught exceptions; signal-aware shutdown for `SIGINT` and `SIGTERM`
 
 ## Build
@@ -190,9 +193,12 @@ color <selection> default|black|red|green|yellow|blue|magenta|cyan|white
 set projection perspective|orthographic
 set renderer cells|braille
 set charset ascii|unicode
-set info|sequence on|off|toggle
+set info|sequence|residue-labels|chain-labels on|off|toggle
 set background default|black|red|green|yellow|blue|magenta|cyan|white
 set frame-delay 50
+set trajectory-stride 2
+trajectory-range 1 100
+frame 25
 set trajectory-loop on|off|toggle
 spin on|off|toggle
 play [trajectory.xyz|trajectory.dcd]
@@ -200,6 +206,19 @@ pause
 resume
 step [signed-offset]
 stop
+align <selection>|off
+rmsd [color] <selection>
+rmsf [color] <selection>
+model <number>
+assembly <id>
+export <file.pdb|file.cif> [selection]
+map load <file.mrc|file.map>
+map slice c|r|s <1-based-index>
+map level <density>
+map off
+session save|load <file.ptty-session>
+config <file.ptty>
+run <macro-name>
 zoom 1.5
 zoom <selection>
 center <selection>
@@ -208,7 +227,7 @@ rotate yaw|pitch|roll 15
 reset
 count atoms|residues|chains
 count <selection>
-list chains|selections
+list chains|selections|models|assemblies
 sequence [chain]
 distance <atom-serial|single-atom-selection> <atom-serial|single-atom-selection>
 angle <atom1> <atom2> <atom3>
@@ -257,8 +276,89 @@ ascii-protein topology.pdb --command "play motion.xyz; set trajectory-loop on"
 ```
 
 `play` loads or resumes a trajectory, `pause` freezes the current frame, `step` accepts positive or negative offsets,
-and `stop` returns to frame 1. A snapshot renders the current frame; for example,
+and `stop` returns to the playback range start (frame 1 by default). A snapshot renders the current frame; for example,
 `--command "pause; step 10" --snapshot` renders frame 11.
+
+`trajectory-range <first> <last>` sets an inclusive playback range using 1-based frame numbers,
+pauses playback, and moves the current frame to the nearest range boundary if needed.
+`frame <number>` jumps directly to a frame inside that range and pauses. `set trajectory-stride <N>`
+sets the number of frames per step (1–100000); this applies to playback, keyboard stepping, and
+signed `step` offsets. Without looping, steps beyond the range leave the current frame unchanged;
+with looping, offsets wrap modulo the range length. `stop` returns to the range start.
+For example, `trajectory-range 10 100; set trajectory-stride 5; frame 20; resume` plays every fifth
+frame starting at frame 20. Loading another trajectory resets the range and stride.
+
+
+`align <selection>` uses the current frame as a fixed reference and fits each subsequent frame with an
+unweighted least-squares proper rotation and translation. For example, `frame 1; align name CA; resume`
+removes rigid motion based on C-alpha atoms. The reference center and display scale stay fixed during aligned
+playback, so motion outside the fitting selection does not move the reference on screen. `align off` restores
+unaligned coordinates. Alignment changes display coordinates; the trajectory on disk is unchanged.
+
+`rmsd <selection>` reports each sampled frame's RMSD relative to the range start, plus mean and maximum RMSD.
+`rmsf <selection>` reports population RMS fluctuation about each selected atom's mean position, plus mean and
+maximum RMSF. Both use the inclusive range, stride, and active alignment; without alignment, rigid motion
+contributes to the result. Distances are in Angstroms. `rmsd color <selection>` colors current-frame per-atom
+deviation from the range start; `rmsf color <selection>` colors per-atom RMSF. The palette runs blue to red,
+scaled from zero to the selected maximum. Analysis streams coordinates one frame at a time; RMSF retains
+one mean and variance accumulator per selected atom. RMSD retains one scalar result per sampled frame.
+
+### Molecular models, assemblies, and export
+
+`list models` and `model <number>` inspect and switch deposited models in PDB, mmCIF, and BinaryCIF inputs.
+The first deposited model is selected initially, including ensembles whose numbering starts above 1.
+Switching a model clears selections and unloads the trajectory. Alternate conformers retain the existing
+occupancy-based selection policy within each model.
+
+PDB `CONECT` and mmCIF/BinaryCIF `struct_conn` covalent, disulfide, and metal connections take precedence
+for connected atoms. Radius-based inference is retained for atoms without deposited connections.
+Crystal-mate `struct_conn` links requiring symmetry other than `1_555` are excluded from the asymmetric unit.
+`list assemblies` lists deposited biological assemblies. `assembly <id>` expands PDB REMARK 350 BIOMT or
+mmCIF/BinaryCIF operator tables, including operator lists, ranges, and parenthesized products. Assembly
+expansion acts on the current model and assigns distinct chain IDs to copies; reload the source to return
+to the asymmetric unit or choose another assembly.
+
+`export result.cif chain A` writes only the selected atoms, their current coordinates, and deposited bonds
+whose endpoints are both selected. With no selection, it writes the whole current model. Atom serials,
+chain and residue identifiers, insertion codes, selected alternate-location markers, occupancy, and B-factors
+are preserved. Exports contain the active conformer and model. PDB has fixed field limits; use mmCIF for
+long chain names (including expanded assemblies) or values that do not fit PDB fields. Coordinates are
+written in the original file coordinate system, or the reference system when alignment is enabled.
+`set residue-labels on` and `set chain-labels on` add labels in nearby empty screen space; labels are omitted
+when no collision-free placement is available.
+
+### Density maps and sessions
+
+`map load density.mrc` loads an MRC/CCP4 real-space map. `map slice s 20` selects section 20;
+`c` and `r` select column and row slices. `map level 1.5` hides samples below an absolute density threshold.
+Slices appear as cyan depth-tested points alongside the molecule. Header axis permutations, sampling,
+cell angles, extended headers, start indices, and explicit origins determine their position. A nonzero ORIGIN
+takes precedence over start indices. Modes 0, 1, 2, and 6 are supported in both byte orders; unsupported
+modes are rejected. The decoded-value limit is 512 MiB. Large slices are sampled at a uniform stride to cap
+rendering work at approximately 200,000 points; the full loaded map remains available for slice changes.
+Map headers follow the [CCP-EM MRC2014 specification](https://www.ccpem.ac.uk/mrc-format/mrc2014/).
+
+`session save view.ptty-session` saves camera, rendering settings, selections and colors, model/assembly,
+trajectory range, position, timing and alignment, map path and slice, and autorotation. Restore with
+`session load view.ptty-session`. Sessions reference absolute source paths: keep structure, trajectory,
+and map files available and unchanged. Loading validates all referenced inputs in temporary state before
+replacing the current view. Session files contain data, and do not execute commands.
+
+### Personal macros and key bindings
+
+Use `--config file.ptty`, `config file.ptty`, or the default `~/.config/protein-tty/config.ptty`:
+
+```text
+# Quotes preserve semicolons and spaces in command bodies.
+macro home "frame 1; pause"
+macro inspect-backbone "show backbone; color chain; set info on"
+bind g "run home"
+```
+
+`run home` executes a macro through the shared command dispatcher. Bindings use single printable ASCII keys,
+override normal viewer shortcuts, and are inactive while typing in the command console. `:` remains reserved
+for opening the console. Recursive macros stop at depth 16. Configurations define macros and bindings;
+they do not execute startup commands. Use `--command` or `--script` for startup actions.
 
 The same dispatcher powers automation. Query output is written separately from snapshot output, and script lines
 beginning with `#` are comments:

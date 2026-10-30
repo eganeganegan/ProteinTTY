@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstdlib>
+#include "ascii_protein/config.hpp"
 #include <csignal>
 #include <exception>
 #include <fstream>
@@ -258,15 +260,31 @@ int main(int argc, char** argv) {
         if (options.trajectory) ascii_protein::loadTrajectory(*options.trajectory, structure, trajectory);
         int currentWidth = options.width;
         int currentHeight = options.height;
+        ascii_protein::CommandConfig config;
+        if (options.config)
+            config = ascii_protein::loadCommandConfig(*options.config);
+        else {
+            const char* home = std::getenv("HOME");
+            if (!home) home = std::getenv("USERPROFILE");
+            if (home) {
+                auto path = std::filesystem::path(home) / ".config" / "protein-tty" / "config.ptty";
+                if (std::filesystem::exists(path)) config = ascii_protein::loadCommandConfig(path);
+            }
+        }
         ascii_protein::CommandState commandState{
-            camera, options.render, structure, autorotate, running,
+            camera,
+            options.render,
+            structure,
+            autorotate,
+            running,
             [&] { renderer = std::make_unique<ascii_protein::Renderer>(structure); },
             [&](const std::filesystem::path& path) {
                 std::ofstream output(path);
                 if (!output) throw std::runtime_error("cannot save snapshot: " + path.string());
                 output << renderer->render(camera, options.render, currentWidth, currentHeight).toPlainText() << '\n';
             },
-            &trajectory};
+            &trajectory,
+            &config};
         const auto initialCommands = runInitialCommands(options, commandState);
         if (!running) {
             for (const auto& line : initialCommands.output) std::cout << line << '\n';
@@ -331,6 +349,12 @@ int main(int argc, char** argv) {
                 console.input.clear();
                 console.message.clear();
                 console.historyIndex = console.history.size();
+                continue;
+            }
+            if (event.key == ascii_protein::Key::character && config.bindings.contains(event.character)) {
+                const auto result =
+                    ascii_protein::executeCommands(config.bindings.at(event.character), commandState);
+                console.message = joinOutput(result);
                 continue;
             }
             const auto centerAtom = renderer->nearestAtom(camera, options.render, dimensions.width, dimensions.height);

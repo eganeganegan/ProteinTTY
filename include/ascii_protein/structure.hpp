@@ -5,12 +5,19 @@
 #include <cstddef>
 #include <string>
 #include <vector>
+#include <map>
+#include <filesystem>
+#include <optional>
+#include <utility>
 
 namespace ascii_protein {
 
 enum class SecondaryStructure { coil, helix, sheet };
 
 struct Atom {
+    int model{1};
+    std::string labelChain, labelName;
+    int labelResidue{};
     int serial{};
     std::string name;
     char alternateLocation{' '};
@@ -50,9 +57,25 @@ struct SecondaryRange {
     char endInsertionCode{' '};
 };
 
+struct AssemblyOperator {
+    Mat3 rotation{Mat3::identity()};
+    Vec3 translation;
+};
+struct AssemblyGeneration {
+    std::string id, expression;
+    std::vector<std::string> chains;
+};
 struct Structure {
     std::string sourceName;
+    std::filesystem::path sourcePath;
+    std::string assemblyApplied;
     std::vector<Atom> atoms;
+    std::vector<Atom> depositedAtoms;
+    int model{1};
+    std::vector<std::pair<int, int>> explicitBonds;
+    std::vector<std::map<std::string, std::string>> connections;
+    std::map<std::string, AssemblyOperator> operators;
+    std::vector<AssemblyGeneration> assemblies;
     std::vector<Residue> residues;
     std::vector<Chain> chains;
     std::vector<SecondaryRange> secondaryRanges;
@@ -63,7 +86,7 @@ struct Structure {
     double boundingRadius{1.0};
 
     void finalize();
-    void updatePositions(const std::vector<Vec3>& positions);
+    void updatePositions(const std::vector<Vec3>& positions, std::optional<Vec3> origin = std::nullopt);
 };
 
 std::string oneLetterCode(const std::string& residueName);

@@ -1,4 +1,5 @@
 #include "ascii_protein/renderer.hpp"
+#include "ascii_protein/molecular.hpp"
 
 #include <algorithm>
 #include <array>
@@ -109,6 +110,11 @@ DepthPalette depthPalette(int color) {
 std::vector<Bond> inferBonds(const Structure& structure) {
     constexpr double cellSize = 2.7;
     std::vector<Bond> bonds;
+    std::vector<bool> connected(structure.atoms.size());
+    for (auto [a, b] : depositedBonds(structure)) {
+        bonds.push_back({a, b});
+        connected[a] = connected[b] = true;
+    }
     std::unordered_map<GridCell, std::vector<std::size_t>, GridCellHash> grid;
     grid.reserve(structure.atoms.size());
     for (std::size_t second = 0; second < structure.atoms.size(); ++second) {
@@ -121,6 +127,7 @@ std::vector<Bond> inferBonds(const Structure& structure) {
                     if (found == grid.end()) continue;
                     for (const std::size_t first : found->second) {
                         const auto& left = structure.atoms[first];
+                        if (connected[first] || connected[second]) continue;
                         if (!residuesAreAdjacent(left, right)) continue;
                         const double threshold = covalentRadius(left.element) + covalentRadius(right.element) + 0.55;
                         const double distanceSquared = dot(left.position - right.position, left.position - right.position);
@@ -268,17 +275,38 @@ void Renderer::drawAtom(std::size_t atomIndex, const Camera& camera, const Rende
     const int radius = std::clamp(
         static_cast<int>(std::round(displayRadius(atom.element) * camera.zoom * resolutionScale)), 0, 6);
     const int color = atomColor(atomIndex, settings);
-    for (int offsetY = -radius; offsetY <= radius; ++offsetY) {
-        for (int offsetX = -radius * 2; offsetX <= radius * 2; ++offsetX) {
-            const double distance = std::sqrt(std::pow(offsetX / 2.0, 2.0) + std::pow(offsetY, 2.0));
-            if (distance > radius + 0.25) continue;
-            const double surface = radius == 0 ? 1.0 : std::sqrt(std::max(0.0, 1.0 - std::pow(distance / (radius + 0.25), 2.0)));
-            const double lighting = std::clamp(0.2 + normalizedDepth * 0.45 + surface * 0.35 - offsetY * 0.06, 0.0, 1.0);
-            putPixel(static_cast<int>(std::round(point.projected.x)) + offsetX,
-                     static_cast<int>(std::round(point.projected.y)) + offsetY,
-                     point.projected.depth - surface * 0.2, shadeGlyph(settings.charset, lighting),
-                     depthColor(color, point.projected.depth - surface * 0.2));
-        }
+    if (point.projected.x < -2 * radius - 1 || point.projected.x > viewWidth + 2 * radius ||
+        point.projected.y < -radius - 1 || point.projected.y > height + radius)
+        return;
+    const int centerX = static_cast<int>(std::round(point.projected.x));
+    const int centerY = static_cast<int>(std::round(point.projected.y));
+    if (centerX + 2 * radius < 0 || centerX - 2 * radius >= viewWidth || centerY + radius < 0 ||
+        centerY - radius >= height)
+        return;
+    struct SpritePixel {
+        int x, y;
+        double surface;
+    };
+    // Atom silhouette geometry depends only on the seven supported pixel radii.
+    static const auto sprites = [] {
+        std::array<std::vector<SpritePixel>, 7> result;
+        for (int r = 0; r <= 6; ++r)
+            for (int y = -r; y <= r; ++y)
+                for (int x = -2 * r; x <= 2 * r; ++x) {
+                    const double distance = std::sqrt(std::pow(x / 2.0, 2.0) + std::pow(y, 2.0));
+                    if (distance > r + 0.25) continue;
+                    const double surface =
+                        r == 0 ? 1.0 : std::sqrt(std::max(0.0, 1.0 - std::pow(distance / (r + 0.25), 2.0)));
+                    result[r].push_back({x, y, surface});
+                }
+        return result;
+    }();
+    for (const auto& pixel : sprites[radius]) {
+        const double lighting =
+            std::clamp(0.2 + normalizedDepth * 0.45 + pixel.surface * 0.35 - pixel.y * 0.06, 0.0, 1.0);
+        const double depth = point.projected.depth - pixel.surface * 0.2;
+        putPixel(centerX + pixel.x, centerY + pixel.y, depth, shadeGlyph(settings.charset, lighting),
+                 depthColor(color, depth));
     }
 }
 
@@ -499,6 +527,28 @@ const Framebuffer& Renderer::render(const Camera& camera, const RenderSettings& 
     const int rasterWidth = renderingBraille_ ? viewWidth * 2 : viewWidth;
     const int rasterHeight = renderingBraille_ ? height * 4 : height;
 
+    if (settings.densityMap) {
+        const auto& map = *settings.densityMap;
+        const int axis = settings.mapAxis, u = (axis + 1) % 3, v = (axis + 2) % 3;
+        const int stride =
+            std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(map.dimensions[u]) *
+                                                             map.dimensions[v] / 200000.0))));
+        for (int j = 0; j < map.dimensions[v]; j += stride)
+            for (int i = 0; i < map.dimensions[u]; i += stride) {
+                int index[3]{};
+                index[axis] = settings.mapSlice;
+                index[u] = i;
+                index[v] = j;
+                const auto value = map.value(index[0], index[1], index[2]);
+                if (value < settings.mapLevel) continue;
+                auto p = transform(map.position(index[0], index[1], index[2]) - structure_.originalCentroid,
+                                   camera, rasterWidth, rasterHeight, settings.backend)
+                             .projected;
+                if (p.visible && p.x >= 0 && p.x < rasterWidth && p.y >= 0 && p.y < rasterHeight)
+                    putPixel(static_cast<int>(p.x), static_cast<int>(p.y), p.depth, U'.', 36);
+            }
+    }
+
     if (settings.mode == RenderMode::ballAndStick) {
         for (const auto& bond : bonds_) drawLine(bond.first, bond.second, camera, settings, rasterWidth, rasterHeight);
     } else if (settings.mode == RenderMode::backbone) {
@@ -520,6 +570,58 @@ const Framebuffer& Renderer::render(const Camera& camera, const RenderSettings& 
     }
     if (renderingBraille_) composeBraille(viewWidth, height);
     renderingBraille_ = false;
+    if (settings.residueLabels || settings.chainLabels) {
+        std::vector<bool> occupied(static_cast<std::size_t>(viewWidth) * height);
+        auto label = [&](std::size_t atomIndex, const std::string& text) {
+            if (atomIndex < settings.visibleAtoms.size() && !settings.visibleAtoms[atomIndex]) return;
+            auto p = transform(structure_.atoms[atomIndex].position, camera, rasterWidth, rasterHeight,
+                               settings.backend)
+                         .projected;
+            if (settings.backend == RendererBackend::braille) {
+                p.x /= 2;
+                p.y /= 4;
+            }
+            if (!p.visible || p.x < 0 || p.x >= viewWidth || p.y < 0 || p.y >= height) return;
+            const int px = static_cast<int>(p.x), py = static_cast<int>(p.y);
+            const int size = static_cast<int>(text.size());
+            const std::array<std::pair<int, int>, 8> candidates{{{px + 4, py},
+                                                                 {px + 2, py - 2},
+                                                                 {px + 2, py + 2},
+                                                                 {px - size - 4, py},
+                                                                 {px - size / 2, py - 3},
+                                                                 {px - size / 2, py + 3},
+                                                                 {px + 6, py - 1},
+                                                                 {px - size - 6, py + 1}}};
+            for (auto [x, y] : candidates) {
+                if (x < 0 || y < 0 || y >= height - 2 || x + size > viewWidth) continue;
+                bool clear = true;
+                for (std::size_t i = 0; i < text.size(); ++i) {
+                    auto index = static_cast<std::size_t>(y) * viewWidth + x + i;
+                    if (occupied[index] || framebuffer_.at(x + static_cast<int>(i), y).glyph != U' ') {
+                        clear = false;
+                        break;
+                    }
+                }
+                if (!clear) continue;
+                framebuffer_.text(x, y, text, 37);
+                for (std::size_t i = 0; i < text.size(); ++i)
+                    occupied[static_cast<std::size_t>(y) * viewWidth + x + i] = true;
+                break;
+            }
+        };
+        if (settings.chainLabels)
+            for (const auto& chain : structure_.chains)
+                if (!chain.residueIndices.empty()) {
+                    const auto& residue = structure_.residues[chain.residueIndices.front()];
+                    if (!residue.atomIndices.empty()) label(residue.atomIndices.front(), "chain " + chain.id);
+                }
+        if (settings.residueLabels)
+            for (const auto& residue : structure_.residues)
+                if (!residue.atomIndices.empty())
+                    label(residue.atomIndices.front(),
+                          residue.chain + ":" + residue.name + std::to_string(residue.number) +
+                              (residue.insertionCode == ' ' ? "" : std::string(1, residue.insertionCode)));
+    }
     drawPanels(camera, settings, viewWidth);
     if (settings.showHelp) drawHelp();
     drawCommandStatus(settings);

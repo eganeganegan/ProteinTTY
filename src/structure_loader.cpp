@@ -12,7 +12,7 @@
 
 namespace ascii_protein {
 
-Structure loadStructure(const std::filesystem::path& path) {
+static Structure readStructure(const std::filesystem::path& path) {
     std::string extension = path.extension().string();
     std::transform(extension.begin(), extension.end(), extension.begin(),
                    [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
@@ -34,6 +34,12 @@ Structure loadStructure(const std::filesystem::path& path) {
         return MmcifParser::parse(input, path.filename().string());
     }
     return PdbParser::parse(input, path.filename().string());
+}
+
+Structure loadStructure(const std::filesystem::path& path) {
+    auto structure = readStructure(path);
+    structure.sourcePath = std::filesystem::absolute(path);
+    return structure;
 }
 
 } // namespace ascii_protein

@@ -6,6 +6,8 @@
 #include "ascii_protein/structure.hpp"
 
 #include <array>
+#include <memory>
+#include "ascii_protein/density_map.hpp"
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -24,6 +26,12 @@ struct RenderSettings {
     Charset charset{Charset::unicode};
     RendererBackend backend{RendererBackend::braille};
     bool color{true};
+    bool residueLabels{};
+    bool chainLabels{};
+    std::shared_ptr<const DensityMap> densityMap;
+    int mapAxis{2};
+    int mapSlice{};
+    double mapLevel{};
     bool showInfo{true};
     bool showSequence{false};
     bool showHelp{false};

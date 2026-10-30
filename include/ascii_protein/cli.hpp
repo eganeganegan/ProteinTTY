@@ -25,6 +25,7 @@ struct CliOptions {
     int height{32};
     std::vector<std::string> commands;
     std::vector<std::filesystem::path> scripts;
+    std::optional<std::filesystem::path> config;
     std::optional<std::filesystem::path> trajectory;
     int frameDelayMs{100};
     bool trajectoryLoop{};

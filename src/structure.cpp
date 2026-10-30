@@ -34,10 +34,11 @@ void selectAlternateConformers(std::vector<Atom>& source) {
     source = std::move(atoms);
 }
 
-void updateCoordinateBounds(Structure& structure) {
+void updateCoordinateBounds(Structure& structure, std::optional<Vec3> origin = std::nullopt) {
     structure.originalCentroid = {};
     for (const auto& atom : structure.atoms) structure.originalCentroid += atom.position;
     structure.originalCentroid = structure.originalCentroid / static_cast<double>(structure.atoms.size());
+    if (origin) structure.originalCentroid = *origin;
     structure.boundsMin = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
                            std::numeric_limits<double>::max()};
     structure.boundsMax = {std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest(),
@@ -59,6 +60,11 @@ void updateCoordinateBounds(Structure& structure) {
 } // namespace
 
 void Structure::finalize() {
+    if (depositedAtoms.empty()) {
+        depositedAtoms = atoms;
+        if (!atoms.empty()) model = atoms.front().model;
+    }
+    std::erase_if(atoms, [&](const Atom& a) { return a.model != model; });
     selectAlternateConformers(atoms);
     if (atoms.empty()) {
         boundingRadius = 1.0;
@@ -103,10 +109,10 @@ void Structure::finalize() {
     assignSecondaryStructureFromGeometry(*this);
 }
 
-void Structure::updatePositions(const std::vector<Vec3>& positions) {
+void Structure::updatePositions(const std::vector<Vec3>& positions, std::optional<Vec3> origin) {
     if (positions.size() != atoms.size()) throw std::runtime_error("coordinate count does not match structure");
     for (std::size_t index = 0; index < atoms.size(); ++index) atoms[index].position = positions[index];
-    if (!atoms.empty()) updateCoordinateBounds(*this);
+    if (!atoms.empty()) updateCoordinateBounds(*this, origin);
 }
 
 std::string oneLetterCode(const std::string& residueName) {

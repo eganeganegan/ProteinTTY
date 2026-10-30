@@ -3,6 +3,8 @@
 #include <charconv>
 #include <fstream>
 #include <optional>
+#include <sstream>
+#include "ascii_protein/molecular.hpp"
 #include <stdexcept>
 
 namespace ascii_protein {
@@ -76,9 +78,71 @@ Structure PdbParser::parse(std::istream& input, std::string sourceName) {
     structure.sourceName = std::move(sourceName);
     std::string line;
     std::size_t lineNumber = 0;
+    int model = 1;
+    std::string assemblyId;
+    std::vector<std::string> assemblyChains;
     while (std::getline(input, line)) {
         ++lineNumber;
         const std::string record = trim(field(line, 0, 6));
+        if (record == "MODEL") {
+            model = parseInteger(field(line, 10, 4)).value_or(1);
+            continue;
+        }
+        if (record == "CONECT") {
+            const auto first = parseInteger(field(line, 6, 5));
+            if (first)
+                for (std::size_t offset = 11; offset < 31 && offset < line.size(); offset += 5)
+                    if (auto second = parseInteger(field(line, offset, 5)))
+                        structure.explicitBonds.emplace_back(*first, *second);
+            continue;
+        }
+        if (record == "REMARK" && field(line, 7, 3) == "350") {
+            auto pos = line.find("BIOMOLECULE:");
+            if (pos != std::string::npos) {
+                assemblyId = trim(std::string_view(line).substr(pos + 12));
+                assemblyChains.clear();
+            }
+            pos = line.find("CHAINS:");
+            if (pos != std::string::npos) {
+                if (line.find("APPLY") != std::string::npos) assemblyChains.clear();
+                std::string names = line.substr(pos + 7);
+                for (auto& c : names)
+                    if (c == ',') c = ' ';
+                std::istringstream ids(names);
+                std::string id;
+                while (ids >> id)
+                    assemblyChains.push_back(id == "NULL" ? "" : id);
+            }
+            pos = line.find("BIOMT");
+            if (pos != std::string::npos && pos + 5 < line.size()) {
+                int row = line[pos + 5] - '1';
+                std::istringstream values(line.substr(pos + 6));
+                std::string id;
+                double x, y, z, t;
+                if (row >= 0 && row < 3 && values >> id >> x >> y >> z >> t) {
+                    auto groupKey = assemblyId;
+                    for (auto& c : groupKey)
+                        if (c == ',' || c == ' ') c = '_';
+                    const auto key = groupKey + ":" + id;
+                    auto& op = structure.operators[key];
+                    op.rotation.m[row][0] = x;
+                    op.rotation.m[row][1] = y;
+                    op.rotation.m[row][2] = z;
+                    if (row == 0) op.translation.x = t;
+                    if (row == 1) op.translation.y = t;
+                    if (row == 2) op.translation.z = t;
+                    if (row == 2) {
+                        auto names = assemblyId;
+                        for (auto& c : names)
+                            if (c == ',') c = ' ';
+                        std::istringstream ids(names);
+                        std::string assembly;
+                        while (ids >> assembly)
+                            structure.assemblies.push_back({assembly, key, assemblyChains});
+                    }
+                }
+            }
+        }
         if (record == "HELIX") {
             const auto start = parseInteger(field(line, 21, 4));
             const auto end = parseInteger(field(line, 33, 4));
@@ -114,6 +178,7 @@ Structure PdbParser::parse(std::istream& input, std::string sourceName) {
         }
 
         Atom atom;
+        atom.model = model;
         atom.serial = *serial;
         atom.name = trim(field(line, 12, 4));
         atom.alternateLocation = character(line, 16);

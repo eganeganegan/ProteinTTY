@@ -1,11 +1,15 @@
 cmake_minimum_required(VERSION 3.20)
-project(ascii_protein VERSION 0.11.0 LANGUAGES CXX)
+project(ascii_protein VERSION 0.14.0 LANGUAGES CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(ASCII_PROTEIN_BUILD_TESTS "Build the test suite" ON)
 
 add_library(ascii_protein_core
+    src/config.cpp
+    src/session.cpp
+    src/density_map.cpp
+    src/molecular.cpp
     src/structure.cpp
     src/pdb_parser.cpp
     src/mmcif_parser.cpp
@@ -20,6 +24,7 @@ add_library(ascii_protein_core
     src/command.cpp
     src/selection.cpp
     src/secondary_assignment.cpp
+    src/trajectory_analysis.cpp
     src/trajectory.cpp
     src/xyz_trajectory_source.cpp
     src/dcd_trajectory_source.cpp
@@ -59,6 +64,9 @@ add_custom_target(release-package
     VERBATIM
 )
 
+add_executable(workflow_benchmark EXCLUDE_FROM_ALL tests/benchmark.cpp)
+target_link_libraries(workflow_benchmark PRIVATE ascii_protein_core)
+
 include(GNUInstallDirs)
 install(TARGETS ascii-protein RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
@@ -73,4 +81,7 @@ if(ASCII_PROTEIN_BUILD_TESTS)
         target_compile_options(ascii_protein_tests PRIVATE /W4 /permissive-)
     endif()
     add_test(NAME ascii_protein_tests COMMAND ascii_protein_tests)
+    add_executable(workflow_tests tests/workflow_tests.cpp)
+    target_link_libraries(workflow_tests PRIVATE ascii_protein_core)
+    add_test(NAME workflow_tests COMMAND workflow_tests)
 endif()

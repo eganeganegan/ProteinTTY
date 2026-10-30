@@ -1,4 +1,5 @@
 #include "ascii_protein/command.hpp"
+#include "ascii_protein/molecular.hpp"
 #include "ascii_protein/binarycif_parser.hpp"
 #include "ascii_protein/cli.hpp"
 #include "ascii_protein/dcd_trajectory_source.hpp"
@@ -312,6 +313,87 @@ std::string binaryCifEncodedColumnFixture(bool excessiveRunLength) {
     }
     writer.string("mask"); writer.nil();
     return std::move(writer).finish();
+}
+
+void testBinaryCifMolecularMetadata() {
+    MessagePackWriter writer;
+    writer.map(1);
+    writer.string("dataBlocks");
+    writer.array(1);
+    writer.map(1);
+    writer.string("categories");
+    writer.array(4);
+    writer.map(3);
+    writer.string("name");
+    writer.string("_atom_site");
+    writer.string("rowCount");
+    writer.integer(3);
+    writer.string("columns");
+    writer.array(13);
+    writeStringColumn(writer, "group_PDB", {"ATOM", "ATOM", "ATOM"});
+    writeNumericColumn(writer, "id", littleEndianIntegers({1, 2, 3}), 3);
+    writeStringColumn(writer, "type_symbol", {"C", "N", "C"});
+    writeStringColumn(writer, "auth_atom_id", {"CA", "N", "CA"});
+    writeStringColumn(writer, "label_atom_id", {"CA", "N", "CA"});
+    writeStringColumn(writer, "auth_asym_id", {"AUTH", "AUTH", "AUTH"});
+    writeStringColumn(writer, "label_asym_id", {"L", "L", "L"});
+    writeNumericColumn(writer, "auth_seq_id", littleEndianIntegers({100, 100, 100}), 3);
+    writeNumericColumn(writer, "label_seq_id", littleEndianIntegers({1, 1, 1}), 3);
+    writeNumericColumn(writer, "Cartn_x", littleEndianDoubles({0, 10, 20}), 33);
+    writeNumericColumn(writer, "Cartn_y", littleEndianDoubles({0, 0, 0}), 33);
+    writeNumericColumn(writer, "Cartn_z", littleEndianDoubles({0, 0, 0}), 33);
+    writeNumericColumn(writer, "pdbx_PDB_model_num", littleEndianIntegers({1, 1, 2}), 3);
+    writer.map(3);
+    writer.string("name");
+    writer.string("_struct_conn");
+    writer.string("rowCount");
+    writer.integer(1);
+    writer.string("columns");
+    writer.array(7);
+    writeStringColumn(writer, "conn_type_id", {"covale"});
+    writeStringColumn(writer, "ptnr1_label_asym_id", {"L"});
+    writeNumericColumn(writer, "ptnr1_label_seq_id", littleEndianIntegers({1}), 3);
+    writeStringColumn(writer, "ptnr1_label_atom_id", {"CA"});
+    writeStringColumn(writer, "ptnr2_label_asym_id", {"L"});
+    writeNumericColumn(writer, "ptnr2_label_seq_id", littleEndianIntegers({1}), 3);
+    writeStringColumn(writer, "ptnr2_label_atom_id", {"N"});
+    writer.map(3);
+    writer.string("name");
+    writer.string("_pdbx_struct_oper_list");
+    writer.string("rowCount");
+    writer.integer(1);
+    writer.string("columns");
+    writer.array(13);
+    writeStringColumn(writer, "id", {"1"});
+    for (int i = 1; i <= 3; ++i)
+        for (int j = 1; j <= 3; ++j)
+            writeNumericColumn(writer, "matrix[" + std::to_string(i) + "][" + std::to_string(j) + "]",
+                               littleEndianDoubles({i == j ? 1. : 0.}), 33);
+    writeNumericColumn(writer, "vector[1]", littleEndianDoubles({0.123456789}), 33);
+    writeNumericColumn(writer, "vector[2]", littleEndianDoubles({0}), 33);
+    writeNumericColumn(writer, "vector[3]", littleEndianDoubles({0}), 33);
+    writer.map(3);
+    writer.string("name");
+    writer.string("_pdbx_struct_assembly_gen");
+    writer.string("rowCount");
+    writer.integer(1);
+    writer.string("columns");
+    writer.array(3);
+    writeStringColumn(writer, "assembly_id", {"1"});
+    writeStringColumn(writer, "oper_expression", {"1"});
+    writeStringColumn(writer, "asym_id_list", {"L"});
+    std::istringstream input(std::move(writer).finish());
+    auto s = ascii_protein::BinaryCifParser::parse(input, "metadata.bcif");
+    require(s.atoms.size() == 2 && ascii_protein::depositedBonds(s).size() == 1,
+            "BinaryCIF deposited connection");
+    require(near(s.operators.at("1").translation.x, 0.123456789), "BinaryCIF operator precision");
+    ascii_protein::selectModel(s, 2);
+    require(s.atoms.size() == 1, "BinaryCIF model switching");
+    ascii_protein::selectModel(s, 1);
+    ascii_protein::expandAssembly(s, "1");
+    require(s.atoms.size() == 2 && ascii_protein::depositedBonds(s).size() == 1,
+            "BinaryCIF assembly chain mapping");
+    require(near(s.atoms[0].position.x + s.originalCentroid.x, 0.123456789), "BinaryCIF assembly transform");
 }
 
 void requireBinaryCifRejected(std::string bytes, std::string_view expected) {
@@ -1075,6 +1157,66 @@ void testXyzTrajectory() {
     std::filesystem::remove(negativeCount);
 }
 
+void testTrajectoryPlaybackRange() {
+    const auto path = std::filesystem::temp_directory_path() / "protein-tty-range.xyz";
+    {
+        std::ofstream output(path);
+        for (int frame = 0; frame < 8; ++frame)
+            output << "2\nframe\nC 0 0 0\nO " << 2 * (frame + 1) << " 0 0\n";
+    }
+    ascii_protein::Structure structure;
+    ascii_protein::Atom carbon, oxygen;
+    carbon.element = "C";
+    carbon.name = "C";
+    carbon.serial = 1;
+    oxygen.element = "O";
+    oxygen.name = "O";
+    oxygen.serial = 2;
+    structure.atoms = {carbon, oxygen};
+    structure.finalize();
+    ascii_protein::TrajectoryState trajectory;
+    ascii_protein::loadTrajectory(path, structure, trajectory);
+    ascii_protein::Camera camera;
+    ascii_protein::RenderSettings render;
+    bool autorotate = false, running = true;
+    ascii_protein::CommandState state{camera, render, structure, autorotate, running, {}, {}, &trajectory};
+    require(ascii_protein::executeCommands("trajectory-range 2 7; set trajectory-stride 2; frame 4", state)
+                .success,
+            "range, stride and direct frame commands");
+    require(trajectory.frameIndex == 3 && !trajectory.playing && near(structure.atoms[1].position.x, 4),
+            "frame command uses 1-based numbering and updates coordinates");
+    require(ascii_protein::stepTrajectory(structure, trajectory) && trajectory.frameIndex == 5,
+            "forward stride");
+    require(!ascii_protein::stepTrajectory(structure, trajectory) && trajectory.frameIndex == 5,
+            "stride respects upper range boundary");
+    trajectory.loop = true;
+    require(ascii_protein::stepTrajectory(structure, trajectory) && trajectory.frameIndex == 1,
+            "stride wraps within inclusive range");
+    require(ascii_protein::stepTrajectory(structure, trajectory, -1) && trajectory.frameIndex == 5,
+            "reverse stride wraps within range");
+    ascii_protein::stopTrajectory(structure, trajectory);
+    require(trajectory.frameIndex == 1 && near(structure.atoms[1].position.x, 2),
+            "stop returns to range start");
+    for (const auto* command : {"frame 0", "frame 9", "frame 1", "frame nan", "frame 2.5",
+                                "trajectory-range 7 2", "trajectory-range 1 9", "set trajectory-stride 0",
+                                "set trajectory-stride nan", "set trajectory-stride 1.5", "step nan"}) {
+        require(!ascii_protein::executeCommands(command, state).success, "invalid playback control rejected");
+        require(trajectory.frameIndex == 1 && trajectory.rangeStart == 1 && trajectory.rangeEnd == 6 &&
+                    trajectory.stride == 2,
+                "invalid control preserves playback coordinates and settings");
+    }
+    require(ascii_protein::executeCommands("trajectory-range 5 5; resume", state).success,
+            "single frame range accepted");
+    trajectory.loop = false;
+    require(!ascii_protein::stepTrajectory(structure, trajectory), "single frame range boundary");
+    require(ascii_protein::trajectoryStatus(trajectory).find("range 5-5  stride 2") != std::string::npos,
+            "status exposes playback range and stride");
+    ascii_protein::loadTrajectory(path, structure, trajectory);
+    require(trajectory.rangeStart == 0 && trajectory.rangeEnd == 7 && trajectory.stride == 1,
+            "loading resets playback range and stride");
+    std::filesystem::remove(path);
+}
+
 void testDcdTrajectory() {
     const auto path = std::filesystem::temp_directory_path() / "protein-tty-trajectory.dcd";
     {
@@ -1169,6 +1311,8 @@ int main() {
         testCommandCliOptions();
         testXyzTrajectory();
         testDcdTrajectory();
+        testBinaryCifMolecularMetadata();
+        testTrajectoryPlaybackRange();
         std::cout << "All tests passed\n";
         return 0;
     } catch (const std::exception& error) {

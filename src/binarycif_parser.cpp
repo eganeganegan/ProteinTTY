@@ -1,4 +1,7 @@
 #include "ascii_protein/binarycif_parser.hpp"
+#include "ascii_protein/molecular.hpp"
+#include <sstream>
+#include <iomanip>
 
 #include <algorithm>
 #include <bit>
@@ -319,7 +322,9 @@ struct Column {
         if (number == static_cast<double>(static_cast<std::int64_t>(number))) {
             return std::to_string(static_cast<std::int64_t>(number));
         }
-        return std::to_string(number);
+        std::ostringstream out;
+        out << std::setprecision(17) << number;
+        return out.str();
     }
 
     std::optional<double> number(std::size_t row) const {
@@ -410,8 +415,12 @@ void parseAtom(const Columns& columns, std::size_t row, Structure& structure) {
         return;
     }
     const auto model = number(columns, row, {"pdbx_PDB_model_num"});
-    if (model && static_cast<int>(*model) != 1) return;
+
     Atom atom;
+    atom.model = model ? static_cast<int>(*model) : 1;
+    atom.labelChain = text(columns, row, {"label_asym_id"});
+    atom.labelName = text(columns, row, {"label_atom_id"});
+    atom.labelResidue = static_cast<int>(number(columns, row, {"label_seq_id"}).value_or(0));
     atom.serial = static_cast<int>(*serial);
     atom.name = text(columns, row, {"auth_atom_id", "label_atom_id"});
     atom.alternateLocation = marker(text(columns, row, {"label_alt_id"}));
@@ -467,7 +476,9 @@ Structure BinaryCifParser::parse(std::istream& input, std::string sourceName) {
     for (const Value& categoryValue : categories) {
         const auto& category = asMap(categoryValue, "category");
         const std::string& name = asString(member(category, "name", "category"), "category name");
-        if (name != "_atom_site" && name != "_struct_conf" && name != "_struct_sheet_range") continue;
+        if (name != "_atom_site" && name != "_struct_conf" && name != "_struct_sheet_range" &&
+            name != "_struct_conn" && name != "_pdbx_struct_oper_list" && name != "_pdbx_struct_assembly_gen")
+            continue;
         const auto rowCount = asInteger(member(category, "rowCount", name), "category rowCount");
         if (rowCount < 0) throw std::runtime_error("invalid BinaryCIF category row count");
         Columns columns;
@@ -485,7 +496,16 @@ Structure BinaryCifParser::parse(std::istream& input, std::string sourceName) {
         for (std::size_t row = 0; row < static_cast<std::size_t>(rowCount); ++row) {
             if (name == "_atom_site") parseAtom(columns, row, structure);
             else if (name == "_struct_conf") parseSecondary(columns, row, SecondaryStructure::helix, structure);
-            else parseSecondary(columns, row, SecondaryStructure::sheet, structure);
+            else if (name == "_struct_sheet_range")
+                parseSecondary(columns, row, SecondaryStructure::sheet, structure);
+            else {
+                MetadataRow metadata;
+                for (const auto& [key, column] : columns) {
+                    static_cast<void>(column);
+                    metadata[key] = text(columns, row, {key});
+                }
+                readMolecularRow(structure, name, metadata);
+            }
         }
     }
     if (structure.atoms.empty()) throw std::runtime_error("no valid atom_site records in " + structure.sourceName);

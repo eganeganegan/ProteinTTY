@@ -1,8 +1,8 @@
 # ProteinTTY Roadmap
 
-ProteinTTY v0.11 covers the core viewer: PDB, mmCIF, and BinaryCIF structures; RCSB loading; interactive selections and measurements; multiple terminal renderers; secondary-structure assignment; XYZ trajectories; native POSIX and Windows consoles; hardened input handling; and automated cross-platform releases.
+ProteinTTY v0.14 extends the core viewer with trajectory analysis, molecular semantics, density slices, sessions, and personal command configuration. The core viewer supports PDB, mmCIF, and BinaryCIF structures; RCSB loading; interactive selections and measurements; multiple terminal renderers; secondary-structure assignment; XYZ trajectories; native POSIX and Windows consoles; hardened input handling; and automated cross-platform releases.
 
-The next releases should deepen correctness and scientific workflows rather than add more display modes. Versions indicate intended order, not dates.
+The milestones below track implemented capabilities and their validation. Versions indicate feature milestones, not release dates.
 
 ## Completed Milestones
 
@@ -70,28 +70,28 @@ This prototype predates the repository's retained release history; v0.2 is the f
 
 - **Implemented:** Random-access DCD coordinates using the existing topology supplied by PDB, mmCIF, or BinaryCIF.
 - **Implemented:** Disk indexing for XYZ and DCD trajectories without retaining every frame in memory.
-- Add least-squares trajectory alignment to a reference frame for a selected atom set.
-- Add RMSD and RMSF calculations with selection-aware summaries and coloring.
-- Add playback range, stride, and frame-number controls for long simulations.
+- **Implemented:** Least-squares proper-rotation alignment to the current reference frame for a selected atom set, with a stable reference center and display scale.
+- **Implemented:** Streaming RMSD and population RMSF with selection-aware summaries, per-atom colors, and analytic reference tests.
+- **Implemented:** Playback range, stride, and 1-based frame-number commands for long simulations, with forward/reverse stepping and range-local looping.
 
 **Complete when:** trajectories larger than available memory can be stepped in either direction, aligned playback is stable, and RMSD/RMSF results match reference fixtures within documented tolerances.
 
 ## v0.13: Molecular Semantics and Export
 
-- Read explicit connectivity from PDB `CONECT` and mmCIF/BinaryCIF `struct_conn`, preferring deposited bonds over inferred bonds.
-- Add biological-assembly expansion from deposited symmetry and operator tables.
-- Support selecting and switching among PDB/mmCIF models and NMR ensembles.
-- Export the whole structure or a selection to PDB and mmCIF while preserving identifiers, insertion codes, alternate locations, and coordinates.
-- Add residue and chain labels that avoid collisions in dense terminal views.
+- **Implemented:** Read explicit connectivity from PDB `CONECT` and mmCIF/BinaryCIF `struct_conn`, preferring deposited bonds over inferred bonds.
+- **Implemented:** Biological-assembly expansion from deposited BIOMT and CIF operator tables, including operator products.
+- **Implemented:** Select and switch among PDB/mmCIF/BinaryCIF models and NMR ensembles.
+- **Implemented:** Export the current model or selection to PDB/mmCIF, preserving identifiers, insertion codes, selected alternate-location markers, coordinates, and deposited connectivity.
+- **Implemented:** Residue and chain labels with collision-aware placement in both rendering backends.
 
 **Complete when:** explicit connectivity and assembly/model selection survive load-render-export-reload round trips, with no topology changes outside the selected operation.
 
 ## v0.14: Map and Session Support
 
-- Load CCP4/MRC density maps and render configurable isosurfaces or slices alongside atomic structures.
-- Save and restore viewer sessions, including camera, rendering settings, named selections, trajectory position, and loaded paths.
-- Add command macros and optional key bindings in a user configuration file.
-- Profile and optimize rendering for very large assemblies and density maps before adding further visual effects.
+- **Implemented:** Load real-space CCP4/MRC maps (modes 0/1/2/6, either byte order) and render configurable thresholded slices alongside atomic structures.
+- **Implemented:** Versioned viewer sessions with camera, rendering settings, selections, model/assembly, trajectory playback/alignment, maps, and absolute source paths.
+- **Implemented:** Command macros and optional ASCII key bindings in a user configuration file, with bounded macro recursion.
+- **Implemented:** Reproducible 100,000-atom/256³-map benchmark; cached atom sprite geometry, off-screen culling, bounded slice sampling, indexed connection lookup, and buffered map decoding.
 
 **Complete when:** a saved session reproduces the same deterministic frame, map transforms align with deposited structures, and representative large-data benchmarks stay interactive.
 
@@ -102,3 +102,7 @@ This prototype predates the repository's retained release history; v0.2 is the f
 - Keep topology separate from coordinate frames and avoid renderer-specific data in parsers.
 - Require offline fixtures for parsers and analysis algorithms; network tests remain smoke tests only.
 - Treat Windows, macOS, and Linux as equal release targets.
+
+## Validation
+
+See [workflow validation](docs/workflow-validation.md) for numerical tolerances, offline fixtures, benchmark commands, and supported-format limits. Completion here records implemented workflows; release publication and remote platform CI remain separate steps.

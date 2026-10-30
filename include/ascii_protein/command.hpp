@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <functional>
 #include <vector>
+#include "ascii_protein/config.hpp"
 
 namespace ascii_protein {
 
@@ -23,6 +24,7 @@ struct CommandState {
     std::function<void()> structureChanged;
     std::function<void(const std::filesystem::path&)> saveFrame;
     TrajectoryState* trajectory{};
+    CommandConfig* config{};
 };
 
 struct CommandResult {
